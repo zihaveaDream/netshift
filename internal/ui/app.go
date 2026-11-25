@@ -572,10 +572,10 @@ func (a *App) request() (netcfg.Request, error) {
 			}
 			req.Gateways = append(req.Gateways, model.Gateway{Addr: v, Metric: m})
 		}
-	}
-	for _, d := range a.Adv.DNS {
-		if v := strings.TrimSpace(d.Value); v != "" {
-			req.DNS = append(req.DNS, v)
+		for _, d := range a.Adv.DNS {
+			if v := strings.TrimSpace(d.Value); v != "" {
+				req.DNS = append(req.DNS, v)
+			}
 		}
 	}
 	return req, nil
@@ -604,7 +604,9 @@ func (a *App) buildFullProfile(name, location string) model.Profile {
 			}
 		}
 	}
-	if len(a.Adv.DNS) > 0 {
+	if p.DHCP {
+		p.DNS = nil
+	} else if len(a.Adv.DNS) > 0 {
 		p.DNS = nil
 		for _, d := range a.Adv.DNS {
 			if v := strings.TrimSpace(d.Value); v != "" {

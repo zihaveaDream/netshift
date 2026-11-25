@@ -338,6 +338,28 @@ func TestRequestPreservesMultiIPAndMainFormDNS(t *testing.T) {
 	}
 }
 
+func TestDHCPModeIgnoresDisabledStaticDNS(t *testing.T) {
+	app := newTestApp(t)
+	app.adapter = "以太网"
+	app.Form.Mode = 0 // 自动获取地址（输入框全部禁用）
+	app.Form.IP = "192.168.1.10"
+	app.Form.Mask = "255.255.255.0"
+	app.Form.DNS1 = "invalid-leftover-dns"
+	app.Adv.DNS = []AddressRow{{Value: "invalid-leftover-dns"}}
+
+	req, err := app.request()
+	if err != nil {
+		t.Fatalf("request() failed in DHCP mode: %v", err)
+	}
+	if !req.DHCP || len(req.IPv4) != 0 || len(req.DNS) != 0 {
+		t.Errorf("unexpected DHCP request: %+v", req)
+	}
+	profile := app.buildFullProfile("以太网", "")
+	if err := profile.Validate(); err != nil {
+		t.Errorf("DHCP profile validation blocked by stale disabled DNS: %v", err)
+	}
+}
+
 func TestLogViewBuilds(t *testing.T) {
 	app := newTestApp(t)
 	app.LogText = "时间：2026-11-25 12:00:00\nIP地址：192.168.1.10"

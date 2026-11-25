@@ -182,9 +182,13 @@ func RunContext(ctx context.Context, line string) (string, error) {
 		if ctx.Err() == context.DeadlineExceeded {
 			return text, fmt.Errorf("命令执行超时（%v）", defaultCmdTimeout)
 		}
+		var runErr error = err
 		if text != "" {
-			return text, fmt.Errorf("%v：%s", err, text)
+			runErr = fmt.Errorf("%v：%s", err, text)
 		}
+		return text, checkNetshResult(line, text, runErr)
+	}
+	if err := checkNetshResult(line, text, nil); err != nil {
 		return text, err
 	}
 	return text, nil

@@ -196,6 +196,9 @@ func (a *App) executeApplyReq(req netcfg.Request, profile model.Profile) {
 			return "", err
 		}
 		_ = a.store.AppendLog(store.LogFormat(time.Now(), site, sysName, adapterName, profile))
+		if req.DHCP {
+			time.Sleep(400 * time.Millisecond)
+		}
 		list, _ := netcfg.List()
 		host, _ := hostsys.Current()
 		a.post(func() {

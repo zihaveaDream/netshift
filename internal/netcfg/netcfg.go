@@ -115,7 +115,7 @@ func AddressCommands(r Request) ([]string, error) {
 	}
 	var out []string
 	if r.DHCP {
-		return []string{fmt.Sprintf(`netsh interface ip set address name=%s source=dhcp validate=no`, name)}, nil
+		return []string{fmt.Sprintf(`netsh interface ip set address name=%s source=dhcp`, name)}, nil
 	}
 	if len(r.IPv4) == 0 {
 		return nil, fmt.Errorf("没有 IP 地址")
@@ -150,17 +150,17 @@ func AddressCommands(r Request) ([]string, error) {
 		}
 		switch {
 		case i == 0 && gw != "" && metric > 0:
-			out = append(out, fmt.Sprintf(`netsh interface ip set address name=%s static %s %s %s gwmetric=%d validate=no`, name, ip, mask, gw, metric))
+			out = append(out, fmt.Sprintf(`netsh interface ip set address name=%s static %s %s %s gwmetric=%d`, name, ip, mask, gw, metric))
 		case i == 0 && gw != "":
-			out = append(out, fmt.Sprintf(`netsh interface ip set address name=%s static %s %s %s validate=no`, name, ip, mask, gw))
+			out = append(out, fmt.Sprintf(`netsh interface ip set address name=%s static %s %s %s`, name, ip, mask, gw))
 		case i == 0:
-			out = append(out, fmt.Sprintf(`netsh interface ip set address name=%s static %s %s validate=no`, name, ip, mask))
+			out = append(out, fmt.Sprintf(`netsh interface ip set address name=%s static %s %s`, name, ip, mask))
 		case gw != "" && metric > 0:
-			out = append(out, fmt.Sprintf(`netsh interface ip add address name=%s %s %s %s gwmetric=%d validate=no`, name, ip, mask, gw, metric))
+			out = append(out, fmt.Sprintf(`netsh interface ip add address name=%s %s %s %s gwmetric=%d`, name, ip, mask, gw, metric))
 		case gw != "":
-			out = append(out, fmt.Sprintf(`netsh interface ip add address name=%s %s %s %s validate=no`, name, ip, mask, gw))
+			out = append(out, fmt.Sprintf(`netsh interface ip add address name=%s %s %s %s`, name, ip, mask, gw))
 		default:
-			out = append(out, fmt.Sprintf(`netsh interface ip add address name=%s %s %s validate=no`, name, ip, mask))
+			out = append(out, fmt.Sprintf(`netsh interface ip add address name=%s %s %s`, name, ip, mask))
 		}
 	}
 	// Additional gateways beyond the number of static IPv4 addresses.
@@ -237,9 +237,9 @@ func SetGatewayCommand(adapter, gateway string, metric int) (string, error) {
 		return "", err
 	}
 	if metric > 0 {
-		return fmt.Sprintf(`netsh interface ip set address name=%s gateway=%s gwmetric=%d validate=no`, name, gateway, metric), nil
+		return fmt.Sprintf(`netsh interface ip set address name=%s gateway=%s gwmetric=%d`, name, gateway, metric), nil
 	}
-	return fmt.Sprintf(`netsh interface ip set address name=%s gateway=%s validate=no`, name, gateway), nil
+	return fmt.Sprintf(`netsh interface ip set address name=%s gateway=%s`, name, gateway), nil
 }
 
 // SetGatewaysCommands builds the commands to replace an adapter's gateways with
@@ -325,3 +325,73 @@ func RenewCommand(adapter string) (string, error) {
 }
 
 func FlushDNSCommand() string { return `ipconfig /flushdns` }
+
+// checkNetshResult reconciles two Windows netsh quirks:
+//  1. Invalid arguments or syntax errors print an error/Usage block yet still
+//     exit with code 0, which would otherwise look like a silent success.
+//  2. Running `source=dhcp` on an interface/DNS that is already set to DHCP
+//     prints "DHCP is already enabled..." (or its localized equivalent) and
+//     exits with code 1, which is idempotently already in the desired state.
+func checkNetshResult(line, output string, runErr error) error {
+	trimmedLine := strings.TrimSpace(line)
+	if !strings.HasPrefix(strings.ToLower(trimmedLine), "netsh ") {
+		return runErr
+	}
+	if runErr != nil {
+		if isAlreadyDHCP(trimmedLine, output) {
+			return nil
+		}
+		return runErr
+	}
+	if isNetshSyntaxError(output) {
+		return fmt.Errorf("netsh 命令参数或语法错误：%s", firstNonEmptyLine(output))
+	}
+	return nil
+}
+
+func isAlreadyDHCP(line, output string) bool {
+	if !strings.Contains(strings.ToLower(line), "source=dhcp") {
+		return false
+	}
+	lower := strings.ToLower(output)
+	return strings.Contains(lower, "dhcp is already enabled") ||
+		strings.Contains(lower, "已启用 dhcp") ||
+		strings.Contains(lower, "已启用dhcp")
+}
+
+func isNetshSyntaxError(output string) bool {
+	if strings.TrimSpace(output) == "" {
+		return false
+	}
+	lower := strings.ToLower(output)
+	for _, marker := range []string{
+		"is not a valid argument for this command",
+		"the syntax supplied for this command is not valid",
+		"the following command was not found",
+		"不是此命令的有效参数",
+		"为此命令提供的语法不正确",
+		"找不到以下命令",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	for _, raw := range strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n") {
+		line := strings.TrimSpace(raw)
+		if strings.HasPrefix(strings.ToLower(line), "usage:") ||
+			strings.HasPrefix(line, "用法:") ||
+			strings.HasPrefix(line, "用法：") {
+			return true
+		}
+	}
+	return false
+}
+
+func firstNonEmptyLine(s string) string {
+	for _, raw := range strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
+		if line := strings.TrimSpace(raw); line != "" {
+			return line
+		}
+	}
+	return strings.TrimSpace(s)
+}

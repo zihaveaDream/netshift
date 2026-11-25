@@ -1,6 +1,7 @@
 package netcfg
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -19,7 +20,7 @@ func TestCommandsStatic(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		`netsh interface ip set address name="以太网" static 192.168.1.10 255.255.255.0 192.168.1.1 validate=no`,
+		`netsh interface ip set address name="以太网" static 192.168.1.10 255.255.255.0 192.168.1.1`,
 		`netsh interface ip set dns name="以太网" static 192.168.1.1 validate=no primary`,
 		`netsh interface ip add dns name="以太网" 8.8.8.8 index=2 validate=no`,
 	}
@@ -66,7 +67,7 @@ func TestCommandsDHCP(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		`netsh interface ip set address name="以太网" source=dhcp validate=no`,
+		`netsh interface ip set address name="以太网" source=dhcp`,
 		`netsh interface ip set dns name="以太网" source=dhcp`,
 	}
 	for i := range want {
@@ -164,5 +165,81 @@ func TestExtraGatewaysAndMultiGateways(t *testing.T) {
 	})
 	if err != nil || len(gcmds) != 2 {
 		t.Fatalf("SetGatewaysCommands = %v, %v", gcmds, err)
+	}
+	for _, c := range gcmds {
+		if strings.Contains(c, "validate=") {
+			t.Errorf("set/add address gateway command must not carry validate=: %s", c)
+		}
+	}
+}
+
+func TestAddressCommandsNeverUseValidate(t *testing.T) {
+	cases := []Request{
+		{Adapter: "以太网", DHCP: true},
+		{Adapter: "以太网", IPv4: []string{"192.168.1.10"}, Masks: []string{"255.255.255.0"}},
+		{Adapter: "以太网", IPv4: []string{"192.168.1.10", "10.0.0.2"}, Masks: []string{"255.255.255.0", "255.0.0.0"},
+			Gateways: []model.Gateway{{Addr: "192.168.1.1", Metric: 1}, {Addr: "10.0.0.1"}}},
+	}
+	for _, r := range cases {
+		cmds, err := AddressCommands(r)
+		if err != nil {
+			t.Fatalf("AddressCommands(%+v): %v", r, err)
+		}
+		for _, c := range cmds {
+			if strings.Contains(c, "validate=") {
+				t.Errorf("address command must not carry validate=: %s", c)
+			}
+		}
+	}
+}
+
+func TestCheckNetshResult(t *testing.T) {
+	// Syntax error with exit code 0 (English and Chinese) must be caught.
+	err := checkNetshResult(
+		`netsh interface ip set address name="以太网" source=dhcp validate=no`,
+		"'validate' is not a valid argument for this command.\nUsage: set address ...",
+		nil,
+	)
+	if err == nil {
+		t.Error("expected syntax error on English netsh output with exit 0")
+	}
+	err = checkNetshResult(
+		`netsh interface ip set address name="以太网" source=dhcp validate=no`,
+		"'validate' 不是此命令的有效参数。\n用法: set address ...",
+		nil,
+	)
+	if err == nil {
+		t.Error("expected syntax error on Chinese netsh output with exit 0")
+	}
+
+	// Idempotent "DHCP is already enabled" with non-zero exit must be treated as success.
+	runErr := errors.New("exit status 1")
+	if err := checkNetshResult(
+		`netsh interface ip set address name="以太网" source=dhcp`,
+		"DHCP is already enabled on this interface.",
+		runErr,
+	); err != nil {
+		t.Errorf("English already-DHCP should succeed: %v", err)
+	}
+	if err := checkNetshResult(
+		`netsh interface ip set dns name="以太网" source=dhcp`,
+		"此接口上已启用 DHCP。",
+		runErr,
+	); err != nil {
+		t.Errorf("Chinese already-DHCP should succeed: %v", err)
+	}
+
+	// Real failure on non-DHCP or other error must still propagate.
+	if err := checkNetshResult(
+		`netsh interface ip set address name="以太网" source=dhcp`,
+		"The filename, directory name, or volume label syntax is incorrect.",
+		runErr,
+	); err == nil {
+		t.Error("real netsh error should not be swallowed")
+	}
+
+	// Normal success output passes through cleanly.
+	if err := checkNetshResult(`netsh interface ip set address name="以太网" source=dhcp`, "", nil); err != nil {
+		t.Errorf("clean success rejected: %v", err)
 	}
 }
