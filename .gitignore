@@ -1,0 +1,12 @@
+# 构建产物与临时目录
+build/
+.tmp/
+.ai_memory/
+
+# 运行时数据与日志
+ip.dat
+ip.dat.bak-*
+ip_history.*.txt
+network_config.log
+*.tmp
+*.log
