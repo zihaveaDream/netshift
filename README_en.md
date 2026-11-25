@@ -19,7 +19,7 @@
 
 ---
 
-**NetShift** is inspired by **kn007's IP Address Modifier 5.0 Remastered**, rebuilt from scratch in Go 1.27 with [mygo](https://github.com/egoist/mygo) native GPU-rendered UI. It integrates the field-engineering workflow of `mulNetworkTest.bat` (**site-based profile inheritance, intranet split routing, and audit logging**) and extends it with **IP conflict pre-checks, automatic pre-change snapshot rollback, connectivity diagnostics, structured IPv4 route management, Windows system proxy & Hosts editing, and quick system-tray switching**.
+**NetShift** is inspired by **kn007's IP Address Modifier 5.0 Remastered**, rebuilt from scratch in Go 1.27 with [mygo](https://github.com/egoist/mygo) native GPU-rendered UI. It integrates multi-subnet engineering workflows (**site-based profile inheritance, intranet split routing, and audit logging**) and extends them with **IP conflict pre-checks, automatic pre-change snapshot rollback, connectivity diagnostics, structured IPv4 route management, Windows system proxy & Hosts editing, and quick system-tray switching**.
 
 - Current Version: `v0.1.0`
 
@@ -33,7 +33,7 @@
 - **All-in-One Diagnostics & Operations Toolbox**: Includes a 254-host concurrent ICMP C-class ping scanner (click any free host to fill it directly into the main static IP form), concurrent Gateway/DNS/Internet/TCP-port diagnostics, CIDR subnet mask calculator, WinINet system proxy toggle, and visual `hosts` editor (preserves original comments and creates an automatic backup on first save).
 - **System Tray Quick Switching**: Stays in the Windows notification area to display the active NIC, switch between up to 8 saved profiles, restore DHCP, or jump directly to Connectivity Diagnostics and Proxy/Hosts Manager.
 - **High-Contrast Typography & Adaptive Windows**: Features a minimalist obsidian-node icon, high-contrast Fluent grid tuned for Source Han Serif SC (`500 Medium / 700 Bold`), vertically centered single-line text & search inputs, and Per-Monitor-v2 DPI awareness. All windows automatically fit within the display work area across 125%–200% scaling without blur or clipping.
-- **Legacy Migration & Traceable Audit Logs**: Automatically imports `ip_history.txt` from `mulNetworkTest.bat` on first launch (backing up the original file as `ip_history.<timestamp>.txt`), and appends every IP and split-route operation to `network_config.log`.
+- **Legacy Migration & Traceable Audit Logs**: Automatically imports legacy `ip_history.txt` records on first launch (backing up the original file as `ip_history.<timestamp>.txt`), and appends every IP and split-route operation to `network_config.log`.
 
 ---
 
@@ -102,7 +102,7 @@ Unified control over adapter selection, computer name/workgroup, MAC address man
 
 - Save, rename in place, save as new, delete, reload, load into main form, or apply immediately; real-time search across profile name, site location, IP, gateway, and computer name.
 - **Site Inheritance**: Click **Inherit Same-Site Settings** to reuse the mask, gateway, and DNS from the most-used profile at the same site while keeping or editing your host IP.
-- **Legacy Import**: Automatically imports `ip_history.txt` created by `mulNetworkTest.bat` when `ip.dat` does not yet exist, preserving a timestamped backup.
+- **Legacy Import**: Automatically imports legacy `ip_history.txt` when `ip.dat` does not yet exist, preserving a timestamped backup.
 
 ### Toolbox (6 Built-in Utilities)
 
@@ -237,7 +237,8 @@ netshift/
 ## Acknowledgements
 
 - **[kn007](https://kn007.net)**: Author of the original *IP Address Modifier 5.0 Remastered*, whose clean workflow and multi-NIC design inspired NetShift.
-- **`mulNetworkTest.bat` Field Script**: Inspired the multi-site profile inheritance, dual-NIC intranet split routing, and `network_config.log` audit format.
+- **[weaKnight](https://github.com/weaKnight/)**: Thanks for the valuable optimization ideas and design inspiration behind multi-site profile inheritance, configuration history management, dual-NIC intranet split routing, and audit logging.
+- **[linuxdo](https://linux.do/) Community**: Thanks to the [linuxdo](https://linux.do/) community for the discussions, sharing, and feedback that made iteration faster and better.
 - **[mygo](https://github.com/egoist/mygo)** (egoist): Lightweight Go native GPU UI and Windows system tray framework.
 - **Go Team & Ecosystem**: Go standard library, `golang.org/x/sys`, and `golang.org/x/text`.
 - **Source Han Serif / Noto Serif SC**: Open-source high-legibility CJK serif typeface by Adobe and Google.
