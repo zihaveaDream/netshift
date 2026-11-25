@@ -29,7 +29,7 @@ func (a *App) AdvancedView(c *ui.Context) {
 			pill(c, ad.Name, colInfo, colInfoBg, colInfoBorder)
 		}
 	}
-	ui.Column(c).Fill().Background(colBackground).Children(func() {
+	ui.Column(c).Fill().Background(colBackground).FontWeight(weightRegular).Children(func() {
 		ui.Column(c).Grow(1).Padding(windowPad).Gap(rowGap).Children(func() {
 			ui.Tabs(c, &a.Adv.Tab, "IP 地址", "网关地址", "DNS 服务器", "其他功能").Height(34).FontSize(bodySize)
 			panelHeader(c, tabTitle, 0, headerRight, func() {
@@ -69,8 +69,8 @@ func (a *App) advancedIPs(c *ui.Context) {
 			i := i
 			key := fmt.Sprintf("ip-row-%d", i)
 			listRow(c, key, i, total, func() {
-				ui.TextInput(c, &a.Adv.IPs[i].Value).Size(colIP, rowH-4).FontSize(bodySize).Placeholder("192.168.1.10")
-				ui.TextInput(c, &a.Adv.IPs[i].Mask).Size(colMask, rowH-4).FontSize(bodySize).Placeholder("255.255.255.0")
+				inlineField(c, &a.Adv.IPs[i].Value, colIP, rowH-4, bodySize).Placeholder("192.168.1.10")
+				inlineField(c, &a.Adv.IPs[i].Mask, colMask, rowH-4, bodySize).Placeholder("255.255.255.0")
 			},
 				func() { a.moveRow(a.Adv.IPs, i, -1) },
 				func() { a.moveRow(a.Adv.IPs, i, +1) },
@@ -88,8 +88,8 @@ func (a *App) advancedIPs(c *ui.Context) {
 	})
 	ui.Divider(c)
 	ui.Row(c).Height(rowH).Gap(rowGap).AlignItems(ui.Center).Children(func() {
-		ui.TextInput(c, &a.Adv.Draft.Value).Size(colIP, rowH-2).FontSize(bodySize).Placeholder("新增 IP 地址")
-		ui.TextInput(c, &a.Adv.Draft.Mask).Size(colMask, rowH-2).FontSize(bodySize).Placeholder("255.255.255.0")
+		inlineField(c, &a.Adv.Draft.Value, colIP, rowH-2, bodySize).Placeholder("新增 IP 地址")
+		inlineField(c, &a.Adv.Draft.Mask, colMask, rowH-2, bodySize).Placeholder("255.255.255.0")
 		button(c, "添加", 84, func() {
 			ip := strings.TrimSpace(a.Adv.Draft.Value)
 			if ip == "" {
@@ -124,8 +124,8 @@ func (a *App) advancedGateways(c *ui.Context) {
 			i := i
 			key := fmt.Sprintf("gw-row-%d", i)
 			listRow(c, key, i, total, func() {
-				ui.TextInput(c, &a.Adv.GWs[i].Value).Size(colGW, rowH-4).FontSize(bodySize).Placeholder("192.168.1.1")
-				ui.TextInput(c, &a.Adv.GWs[i].Metric).Size(colMetric, rowH-4).FontSize(bodySize).Placeholder("自动")
+				inlineField(c, &a.Adv.GWs[i].Value, colGW, rowH-4, bodySize).Placeholder("192.168.1.1")
+				inlineField(c, &a.Adv.GWs[i].Metric, colMetric, rowH-4, bodySize).Placeholder("自动")
 			},
 				func() { a.moveRow(a.Adv.GWs, i, -1) },
 				func() { a.moveRow(a.Adv.GWs, i, +1) },
@@ -145,8 +145,8 @@ func (a *App) advancedGateways(c *ui.Context) {
 	})
 	ui.Divider(c)
 	ui.Row(c).Height(rowH).Gap(rowGap).AlignItems(ui.Center).Children(func() {
-		ui.TextInput(c, &a.Adv.Draft.Value).Size(colGW, rowH-2).FontSize(bodySize).Placeholder("新增网关地址")
-		ui.TextInput(c, &a.Adv.Draft.Metric).Size(colMetric, rowH-2).FontSize(bodySize).Placeholder("跃点")
+		inlineField(c, &a.Adv.Draft.Value, colGW, rowH-2, bodySize).Placeholder("新增网关地址")
+		inlineField(c, &a.Adv.Draft.Metric, colMetric, rowH-2, bodySize).Placeholder("跃点")
 		button(c, "添加", 84, func() {
 			gw := strings.TrimSpace(a.Adv.Draft.Value)
 			if gw == "" {
@@ -180,7 +180,7 @@ func (a *App) advancedDNS(c *ui.Context) {
 			i := i
 			key := fmt.Sprintf("dns-row-%d", i)
 			listRow(c, key, i, total, func() {
-				ui.TextInput(c, &a.Adv.DNS[i].Value).Size(colDNS, rowH-4).FontSize(bodySize).Placeholder("8.8.8.8")
+				inlineField(c, &a.Adv.DNS[i].Value, colDNS, rowH-4, bodySize).Placeholder("8.8.8.8")
 			},
 				func() { a.moveRow(a.Adv.DNS, i, -1) },
 				func() { a.moveRow(a.Adv.DNS, i, +1) },
@@ -196,7 +196,7 @@ func (a *App) advancedDNS(c *ui.Context) {
 	})
 	ui.Divider(c)
 	ui.Row(c).Height(rowH).Gap(rowGap).AlignItems(ui.Center).Children(func() {
-		ui.TextInput(c, &a.Adv.Draft.Value).Size(colDNS, rowH-2).FontSize(bodySize).Placeholder("新增 DNS 服务器")
+		inlineField(c, &a.Adv.Draft.Value, colDNS, rowH-2, bodySize).Placeholder("新增 DNS 服务器")
 		button(c, "添加", 84, func() {
 			d := strings.TrimSpace(a.Adv.Draft.Value)
 			if d == "" {
@@ -230,7 +230,7 @@ func (a *App) advancedOther(c *ui.Context) {
 			ui.Radio(c, &a.Adv.MetricAuto, true, "自动").FontSize(bodySize)
 			ui.Radio(c, &a.Adv.MetricAuto, false, "自定义").FontSize(bodySize)
 		}).Row().Gap(colGap)
-		ui.TextInput(c, &a.Adv.MetricCustom).Size(96, rowH-2).FontSize(bodySize).
+		inlineField(c, &a.Adv.MetricCustom, 96, rowH-2, bodySize).
 			Disabled(a.Adv.MetricAuto).Placeholder("1..9999")
 		hint(c, "跃点数越小，多网卡同时在线时优先级越高")
 	})

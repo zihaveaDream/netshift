@@ -26,7 +26,7 @@ func (a *App) ToolboxView(c *ui.Context) {
 			ui.Text(c, "›").FontSize(18).TextColor(colTextMuted)
 		})
 	}
-	ui.Column(c).Fill().Background(colBackground).Children(func() {
+	ui.Column(c).Fill().Background(colBackground).FontWeight(weightRegular).Children(func() {
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Padding(windowPad).Gap(rowGap).Children(func() {
 				panel(c, "工具箱", 0, func() {
@@ -62,7 +62,7 @@ func (a *App) SubnetView(c *ui.Context) {
 		a.Sub.PrefixText = strconv.Itoa(p)
 		a.recalcSubnet()
 	}
-	ui.Column(c).Fill().Background(colBackground).Children(func() {
+	ui.Column(c).Fill().Background(colBackground).FontWeight(weightRegular).Children(func() {
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Padding(windowPad).Gap(colGap).Children(func() {
 				panel(c, "主机信息", 0, func() {
@@ -149,7 +149,7 @@ func (a *App) PingView(c *ui.Context) {
 		pill(c, fmt.Sprintf("进度 %d/254", a.Ping.Done), colInfo, colInfoBg, colInfoBorder)
 		pill(c, fmt.Sprintf("在线 %d", a.Ping.Online), colSuccess, colSuccessBg, colSuccessBorder)
 	}
-	ui.Column(c).Fill().Background(colBackground).Children(func() {
+	ui.Column(c).Fill().Background(colBackground).FontWeight(weightRegular).Children(func() {
 		ui.Column(c).Grow(1).Padding(windowPad).Gap(rowGap).Children(func() {
 			panelHeader(c, "探测设置", 0, headerRight, func() {
 				ui.Row(c).Height(rowH).Gap(rowGap).AlignItems(ui.Center).Children(func() {
@@ -264,7 +264,7 @@ func (a *App) PingView(c *ui.Context) {
 // LogView shows the recent entries of network_config.log with unified chrome.
 func (a *App) LogView(c *ui.Context) {
 	useTheme(c)
-	ui.Column(c).Fill().Background(colBackground).Children(func() {
+	ui.Column(c).Fill().Background(colBackground).FontWeight(weightRegular).Children(func() {
 		ui.Column(c).Grow(1).Padding(windowPad).Gap(rowGap).Children(func() {
 			panelHeader(c, "操作日志（network_config.log）", 0, func() {
 				quickChip(c, "刷新", false, func() {

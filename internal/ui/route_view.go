@@ -47,7 +47,7 @@ func (a *App) RouteView(c *ui.Context) {
 		}
 		pill(c, fmt.Sprintf("索引 %d", ad.Index), colTextMuted, colSurfaceSubtle, colBorderSoft)
 	}
-	ui.Column(c).Fill().Background(colBackground).Children(func() {
+	ui.Column(c).Fill().Background(colBackground).FontWeight(weightRegular).Children(func() {
 		ui.Column(c).Grow(1).Padding(windowPad).Gap(rowGap).Children(func() {
 			ui.Tabs(c, &a.Route.Tab, "分流路由配置", "IPv4 路由表管理").Height(34).FontSize(bodySize)
 			if a.Route.Tab == 0 {
@@ -224,7 +224,7 @@ func (a *App) routeTablePanel(c *ui.Context) {
 			return
 		}
 		ui.Row(c).Height(rowH).Gap(rowGap).AlignItems(ui.Center).Children(func() {
-			ui.SearchField(c, &a.Route.Filter).Grow(1).Height(rowH - 2).FontSize(bodySize).Placeholder("按目标网段、掩码、网关或接口筛选")
+			searchField(c, &a.Route.Filter, "按目标网段、掩码、网关或接口筛选").Grow(1)
 			ui.Checkbox(c, &a.Route.OnlyPersistent, "仅看永久路由").FontSize(bodySize)
 		})
 		ui.Row(c).Height(24).PaddingX(6).Gap(rowGap).AlignItems(ui.Center).Children(func() {

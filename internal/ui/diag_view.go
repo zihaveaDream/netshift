@@ -21,7 +21,7 @@ func (a *App) DiagView(c *ui.Context) {
 			pill(c, "更新于 "+a.Diag.Report.At.Format("15:04:05"), colTextMuted, colSurfaceSubtle, colBorderSoft)
 		}
 	}
-	ui.Column(c).Fill().Background(colBackground).Children(func() {
+	ui.Column(c).Fill().Background(colBackground).FontWeight(weightRegular).Children(func() {
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Padding(windowPad).Gap(colGap).Children(func() {
 				panelHeader(c, "基础连通性诊断（默认网关 / DNS / 公网）", 0, headerRight, func() {

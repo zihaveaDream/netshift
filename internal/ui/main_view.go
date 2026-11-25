@@ -15,7 +15,7 @@ import (
 // and the IPv4 settings, on one responsive Fluent grid with the status bar under it.
 func (a *App) MainView(c *ui.Context) {
 	useTheme(c)
-	ui.Column(c).Fill().Background(colBackground).Children(func() {
+	ui.Column(c).Fill().Background(colBackground).FontWeight(weightRegular).Children(func() {
 		ui.Row(c).Grow(1).Padding(windowPad).Gap(colGap).AlignItems(ui.Stretch).Children(func() {
 			ui.Column(c).Grow(1).MinWidth(520).Gap(colGap).Children(func() {
 				a.hardwarePanel(c)
@@ -283,7 +283,7 @@ func (a *App) AboutView(c *ui.Context) {
 	headerRight := func() {
 		pill(c, "v"+strings.TrimPrefix(a.Version(), "v"), colInfo, colInfoBg, colInfoBorder)
 	}
-	ui.Column(c).Fill().Background(colBackground).Children(func() {
+	ui.Column(c).Fill().Background(colBackground).FontWeight(weightRegular).Children(func() {
 		ui.Column(c).Grow(1).Padding(windowPad).Gap(colGap).Children(func() {
 			panelHeader(c, "NetShift · 网络配置工具箱", 0, headerRight, func() {
 				ui.Text(c, "灵感源于 kn007 的 IP 地址修改器 5.0 重制版，").FontSize(bodySize)

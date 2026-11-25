@@ -43,7 +43,7 @@ func (a *App) loadIntoEditor(p model.Profile) {
 func (a *App) PresetsView(c *ui.Context) {
 	useTheme(c)
 	list := a.filteredProfiles()
-	ui.Column(c).Fill().Background(colBackground).Children(func() {
+	ui.Column(c).Fill().Background(colBackground).FontWeight(weightRegular).Children(func() {
 		ui.Row(c).Grow(1).Padding(windowPad).Gap(colGap).AlignItems(ui.Stretch).Children(func() {
 			a.presetsListPanel(c, list)
 			a.presetsEditorPanel(c)
@@ -78,7 +78,7 @@ func (a *App) presetsListPanel(c *ui.Context, list []model.Profile) {
 		pill(c, fmt.Sprintf("%d", len(list)), colTextMuted, colSurfaceSubtle, colBorderSoft)
 	}
 	panelHeader(c, "方案列表", 276, headerRight, func() {
-		ui.SearchField(c, &a.Pre.Query).Height(rowH - 2).FontSize(bodySize).Placeholder("搜索方案、地点或 IP")
+		searchField(c, &a.Pre.Query, "搜索方案、地点或 IP")
 		ui.Scroll(c).Grow(1).Children(func() {
 			if len(list) == 0 {
 				ui.Column(c).PaddingY(16).Gap(4).Children(func() {

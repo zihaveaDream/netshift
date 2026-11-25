@@ -13,7 +13,7 @@ import (
 // unified Fluent chrome as AdvancedView.
 func (a *App) SysNetView(c *ui.Context) {
 	useTheme(c)
-	ui.Column(c).Fill().Background(colBackground).Children(func() {
+	ui.Column(c).Fill().Background(colBackground).FontWeight(weightRegular).Children(func() {
 		ui.Column(c).Grow(1).Padding(windowPad).Gap(rowGap).Children(func() {
 			ui.Tabs(c, &a.SysNet.Tab, "系统代理开关", "Hosts 快捷管理").Height(34).FontSize(bodySize)
 			if a.SysNet.Tab == 0 {
@@ -105,7 +105,7 @@ func (a *App) hostsPanel(c *ui.Context) {
 	}
 	panelHeader(c, "系统 Hosts 映射管理（保留原注释，首次保存自动备份）", 0, headerRight, func() {
 		ui.Row(c).Height(rowH).Gap(rowGap).AlignItems(ui.Center).Children(func() {
-			ui.SearchField(c, &a.SysNet.HostsQuery).Grow(1).Height(rowH - 2).FontSize(bodySize).Placeholder("按 IP、域名或备注搜索")
+			searchField(c, &a.SysNet.HostsQuery, "按 IP、域名或备注搜索").Grow(1)
 			hint(c, sysnet.DefaultHostsPath())
 		})
 		note(c, a.SysNet.HostsErr)
@@ -137,9 +137,9 @@ func (a *App) hostsPanel(c *ui.Context) {
 						ui.Box(c).Width(42).AlignItems(ui.Center).Children(func() {
 							ui.Checkbox(c, &e.Enabled, "")
 						})
-						ui.TextInput(c, &e.IP).Size(142, rowH-6).FontSize(hintSize)
-						ui.TextInput(c, &e.Host).Grow(1).Height(rowH - 6).FontSize(hintSize)
-						ui.TextInput(c, &e.Comment).Size(120, rowH-6).FontSize(hintSize).Placeholder("备注")
+						inlineField(c, &e.IP, 142, rowH-6, hintSize)
+						inlineField(c, &e.Host, 0, rowH-6, hintSize).Grow(1)
+						inlineField(c, &e.Comment, 120, rowH-6, hintSize).Placeholder("备注")
 						ui.Button(c, "删除").Size(60, rowH-6).FontSize(hintSize).TextColor(colDanger).OnClick(func() {
 							a.SysNet.Hosts.Delete(i)
 							a.setStatus("已移除条目，点击「保存并刷新 DNS」生效")

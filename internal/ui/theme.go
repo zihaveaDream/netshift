@@ -24,13 +24,14 @@ const (
 )
 
 // High-legibility type scale tuned for Source Han Serif SC (思源宋体).
-// Strictly two weights across the entire app for clean typographic harmony.
+// Strictly two weights across the entire app (500 Medium / 700 Bold) for
+// crisp stroke density and effortless long-session readability.
 const (
 	bodySize      float32 = 13.5
 	hintSize      float32 = 12
 	titleSize     float32 = 14
-	weightRegular         = 400
-	weightHeading         = 600
+	weightRegular         = 500
+	weightHeading         = 700
 )
 
 // High-contrast palette: crisp obsidian ink on pure white cards over a defined
@@ -41,14 +42,14 @@ var (
 	colSurfaceSubtle  = ui.Hex("#f3f6fa")
 	colSurfaceHover   = ui.Hex("#e3effc")
 	colSurfacePressed = ui.Hex("#cfe4fa")
-	colBorder         = ui.Hex("#b5c0cc")
-	colBorderSoft     = ui.Hex("#cfd8e3")
-	colText           = ui.Hex("#0b0f14") // near-black, ~19:1 on white
-	colLabel          = ui.Hex("#1f2937") // deep charcoal for form labels (~14.6:1)
-	colTextMuted      = ui.Hex("#424d5c") // strong slate for hints (~8.6:1)
-	colAccent         = ui.Hex("#005ab5")
-	colAccentHover    = ui.Hex("#004b96")
-	colAccentPressed  = ui.Hex("#003b78")
+	colBorder         = ui.Hex("#94a3b8")
+	colBorderSoft     = ui.Hex("#c4d0dd")
+	colText           = ui.Hex("#05080d") // near-black, ~20:1 on white
+	colLabel          = ui.Hex("#111827") // deep obsidian for form labels (~17.7:1)
+	colTextMuted      = ui.Hex("#334155") // high-contrast slate for hints (~10.4:1)
+	colAccent         = ui.Hex("#0052a8")
+	colAccentHover    = ui.Hex("#00438a")
+	colAccentPressed  = ui.Hex("#003570")
 	colAccentText     = ui.Hex("#ffffff")
 	colPanelHeader    = ui.Hex("#f4f7fb")
 	colStatusBar      = ui.Hex("#e4eaf1")
@@ -72,7 +73,7 @@ var (
 	colOnline       = ui.Hex("#117a37")
 	colOnlineBorder = ui.Hex("#0b5c28")
 	colOffline      = ui.Hex("#e2e8f0")
-	colOfflineText  = ui.Hex("#475569")
+	colOfflineText  = ui.Hex("#334155")
 	colUnknown      = ui.Hex("#ffffff")
 
 	// Terminal preview block colors.
@@ -230,12 +231,28 @@ func dangerButton(c *ui.Context, label string, width float32, onClick func()) ui
 }
 
 // textField is a crisp single-line input sized for the grid; width <= 0 lets it grow.
+// Vertical padding is zeroed so mygo's single-line editor centers glyphs precisely
+// along the input's vertical midline instead of pushing text toward the bottom border.
 func textField(c *ui.Context, value *string, width float32) ui.Element {
-	in := ui.TextInput(c, value).Height(rowH - 2).FontSize(bodySize)
+	in := ui.TextInput(c, value).Height(rowH - 2).Padding(0, 10).FontSize(bodySize).FontWeight(weightRegular)
 	if width > 0 {
 		in = in.Width(width)
 	}
 	return in
+}
+
+// inlineField is a compact single-line table input with exact vertical text centering.
+func inlineField(c *ui.Context, value *string, width, height, fontSize float32) ui.Element {
+	in := ui.TextInput(c, value).Height(height).Padding(0, 8).FontSize(fontSize).FontWeight(weightRegular)
+	if width > 0 {
+		in = in.Width(width)
+	}
+	return in
+}
+
+// searchField is a single-line search input with centered icon and text.
+func searchField(c *ui.Context, query *string, placeholder string) ui.Element {
+	return ui.SearchField(c, query).Height(rowH - 2).Padding(0, 8).FontSize(bodySize).FontWeight(weightRegular).Placeholder(placeholder)
 }
 
 // monoField uses the unified app font so IP/MAC inputs match every adjacent

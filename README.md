@@ -6,7 +6,7 @@
 
 **轻量、原生、高对比度的 Windows 网络配置与现场运维工具箱**
 
-[![Version](https://img.shields.io/badge/version-v5.3.0-005ab5?style=flat-square)](mygo.json)
+[![Version](https://img.shields.io/badge/version-v5.3.0-0052a8?style=flat-square)](mygo.json)
 [![Go](https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go&logoColor=white)](go.mod)
 [![UI](https://img.shields.io/badge/UI-mygo%20v0.7.4-1f2937?style=flat-square)](https://github.com/egoist/mygo)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-0078D6?style=flat-square)](#构建与运行)
@@ -30,7 +30,7 @@
 - **面向多现场的方案与分流能力**：预设方案按「项目地点」管理并支持一键继承同地点的掩码/网关/DNS；内置「内网分流路由」专治有线内网 + Wi-Fi 上网双网卡冲突，支持直连判定、命令实时预览以及结构化 IPv4 路由表筛选与一键删除。
 - **一站式排障工具箱**：内置 254 主机并发 ICMP 群 Ping（选中空闲主机可一键填入主界面静态 IP）、网关/DNS/外网/自定义 TCP 端口并发诊断、CIDR 子网掩码计算器、WinINet 系统代理一键开关与 Hosts 可视化管理（自动保留原注释并首次备份）。
 - **系统托盘极速切换**：常驻通知区域，右键即可查看当前网卡、一键切换常用预设方案（最多展示前 8 项）、恢复 DHCP 或直达连通性诊断与代理/Hosts 管理。
-- **高对比度排版与全窗口自适应**：采用全新深曜石极简图标、思源宋体高对比度 Fluent 网格视觉规范，开启 Per-Monitor-v2 DPI 感知；主窗口与全部子窗口按屏幕工作区与网卡名长度自动适配，125%–200% 缩放下文字清晰不模糊、窗口不溢出。
+- **高对比度排版与全窗口自适应**：采用深曜石极简图标、思源宋体 `500/700` 加粗高对比度 Fluent 网格规范，统一单行输入框与搜索框垂直居中对齐，开启 Per-Monitor-v2 DPI 感知；主窗口与全部子窗口按屏幕工作区与网卡名长度自动适配，125%–200% 缩放下文字清晰不费眼、窗口不溢出。
 - **平滑迁移与审计可追溯**：首次启动自动检测并导入 `mulNetworkTest.bat` 的 `ip_history.txt`（备份原文件为 `ip_history.<时间>.txt`）；每次 IP 变更与分流路由操作均按标准格式追加记录至 `network_config.log`。
 
 ---
@@ -121,9 +121,9 @@
 
 | 规范项 | 配置值 |
 |---|---|
-| **网格与圆角** | 基准单位 `4 DIP`；窗口边距 `14`、列间距 `14`、行间距 `9`、卡片内边距 `13`；表单行高/按钮高 `30`、状态栏高 `30`；卡片圆角 `6`、控件圆角 `4` |
-| **字体与字重** | 界面字体 `Noto Serif SC, Source Han Serif SC, 思源宋体, SimSun, Microsoft YaHei UI, serif`（正文 `13.5` / 标题 `14` / 辅助 `12`，统一 `400` 与 `600` 两级字重）；命令行与日志使用 `Consolas, Courier New, monospace` |
-| **色彩令牌** | 画布 `#E8EDF3`、卡片 `#FFFFFF`、边框 `#B5C0CC`、主文字 `#0B0F14`、标签 `#1F2937`、弱化文字 `#424D5C`、主题强调色 `#005AB5` |
+| **网格与对齐** | 基准单位 `4 DIP`；窗口边距 `14`、列间距 `14`、行间距 `9`、卡片内边距 `13`；表单行高/按钮高 `30`、状态栏高 `30`；卡片圆角 `6`、控件圆角 `4`；输入框与搜索框统一零纵向内边距，文字精确垂直居中 |
+| **字体与字重** | 界面字体 `Noto Serif SC, Source Han Serif SC, 思源宋体, SimSun, Microsoft YaHei UI, serif`（正文 `13.5` / 标题 `14` / 辅助 `12`，统一 `500` Medium 与 `700` Bold 两级高对比字重）；命令行与日志使用 `Consolas, Courier New, monospace` |
+| **色彩令牌** | 画布 `#E8EDF3`、卡片 `#FFFFFF`、边框 `#94A3B8`、主文字 `#05080D`、标签 `#111827`、弱化文字 `#334155`、主题强调色 `#0052A8` |
 | **DPI 与自适应** | 启动时启用 Per-Monitor-v2 DPI 感知；所有窗口根据 `GetDpiForSystem` + `SPI_GETWORKAREA` 动态钳制在屏幕工作区内，防止高缩放屏截断 |
 
 ---
@@ -173,8 +173,8 @@ $env:NETSHIFT_NO_ELEVATE = '1'; .\build\windows-amd64\netshift.exe
 # 只读实测本机真实网卡枚举（GetAdaptersAddresses）
 $env:NETSHIFT_LIVE = '1'; go test -count=1 -run TestLiveAdapters -v ./internal/netcfg
 
-# 离线渲染全窗口 UI 截图到指定目录
-$env:NETSHIFT_SHOTS = (Resolve-Path .tmp\shots).Path; go test -count=1 -run TestCaptureFrames -v ./internal/ui
+# 离线渲染全窗口 UI 截图到指定目录（自动创建目录）
+$env:NETSHIFT_SHOTS = '.tmp\shots'; go test -count=1 -run TestCaptureFrames -v ./internal/ui
 ```
 
 ### 运行时注意事项
