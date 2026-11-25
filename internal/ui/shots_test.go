@@ -30,7 +30,7 @@ func TestCaptureFrames(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := newTestApp(t)
-	app.version = "5.3.0"
+	app.version = "0.1.0"
 	app.elevated = true
 	// Use deterministic synthetic adapters so generated screenshots never leak
 	// real machine NIC names, IPs or hardware MAC addresses.
