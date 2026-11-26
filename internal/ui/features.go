@@ -16,6 +16,307 @@ import (
 	"netshift/internal/sysnet"
 )
 
+// The waits below cover the delay between a netsh call and the state Windows
+// reports afterwards: an adapter switch to DHCP releases the old address at once
+// but only gets a lease after a few seconds.
+const (
+	dhcpSampleDelay = 400 * time.Millisecond // first look after switching to DHCP
+	syncPollTimeout = 12 * time.Second       // how long a background wait follows an adapter
+	syncPollEvery   = 500 * time.Millisecond
+	staticPollLimit = 2500 * time.Millisecond // a static address shows up quickly
+	staticPollEvery = 250 * time.Millisecond
+	enableStartWait = 500 * time.Millisecond // an adapter restarts after enable/MAC change
+	disablePollWait = 3 * time.Second
+	disablePollRate = 250 * time.Millisecond
+)
+
+// cancelAdapterSync stops the background adapter wait and bumps the generation
+// stamp, so a goroutine still running drops its late UI updates instead of
+// painting over a newer sample.
+func (a *App) cancelAdapterSync() {
+	a.mu.Lock()
+	a.syncGen++
+	cancel := a.syncCancel
+	a.syncCancel = nil
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// startAdapterSync cancels the previous wait, arms a new timeout and returns the
+// context together with the generation its updates must match.
+func (a *App) startAdapterSync(timeout time.Duration) (context.Context, context.CancelFunc, uint64) {
+	a.cancelAdapterSync()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	a.mu.Lock()
+	a.syncCancel = cancel
+	gen := a.syncGen
+	a.mu.Unlock()
+	return ctx, cancel, gen
+}
+
+// syncValid reports whether a background sample may still be shown: no newer
+// sync started meanwhile and the main window is alive.
+func (a *App) syncValid(gen uint64) bool {
+	a.mu.Lock()
+	current := a.syncGen == gen
+	a.mu.Unlock()
+	if !current {
+		return false
+	}
+	return a.main == nil || !a.main.IsDestroyed()
+}
+
+// postAdapterRefresh re-reads the computer name and pushes a fresh adapter
+// sample to the main window and the tray menu.
+func (a *App) postAdapterRefresh(list []netcfg.Adapter, overwriteForm bool) {
+	host, _ := hostsys.Current()
+	if a.main == nil {
+		a.applyRefreshedData(list, host, overwriteForm)
+		return
+	}
+	a.post(func() {
+		a.applyRefreshedData(list, host, overwriteForm)
+		a.RefreshTrayMenu()
+	})
+}
+
+// postAdapterRefreshIf pushes a fresh adapter sample only while gen is still
+// the active sync generation, checking again on the UI thread to prevent stale
+// queued callbacks from overwriting newer state.
+func (a *App) postAdapterRefreshIf(gen uint64, list []netcfg.Adapter, overwriteForm bool) {
+	if !a.syncValid(gen) {
+		return
+	}
+	host, _ := hostsys.Current()
+	if a.main == nil {
+		if a.syncValid(gen) {
+			a.applyRefreshedData(list, host, overwriteForm)
+		}
+		return
+	}
+	a.post(func() {
+		if !a.syncValid(gen) {
+			return
+		}
+		a.applyRefreshedData(list, host, overwriteForm)
+		a.RefreshTrayMenu()
+	})
+}
+
+// prevStaticIP returns the static address an adapter had before it was switched
+// to DHCP, or "" when it was already automatic: the wait for a lease uses it to
+// tell the freshly assigned address from the one that was just released.
+func (a *App) prevStaticIP(adapterName string) string {
+	for _, ad := range a.adapters {
+		if ad.Name == adapterName {
+			if ad.DHCP {
+				return ""
+			}
+			return ad.CurrentIP()
+		}
+	}
+	return ""
+}
+
+// adapterByName finds an adapter in a freshly listed snapshot.
+func adapterByName(list []netcfg.Adapter, name string) (netcfg.Adapter, bool) {
+	for _, ad := range list {
+		if ad.Name == name {
+			return ad, true
+		}
+	}
+	return netcfg.Adapter{}, false
+}
+
+// containsAddress reports whether list holds ip.
+func containsAddress(list []string, ip string) bool {
+	for _, v := range list {
+		if strings.TrimSpace(v) == ip {
+			return true
+		}
+	}
+	return false
+}
+
+// syncAdapterDHCP refreshes the state of an adapter that was just switched to
+// automatic addressing, and when the lease is still pending follows the
+// assignment in the background so the dropdown, the badge and the form stop
+// showing the address that was released.
+//
+// It reports the status itself and must not hold the busy flag while waiting: the
+// user has to be able to press 刷新数据 at any time.
+func (a *App) syncAdapterDHCP(adapterName, prevStaticIP string, overwriteForm bool) {
+	a.cancelAdapterSync()
+	time.Sleep(dhcpSampleDelay)
+	list, _ := netcfg.List()
+	host, _ := hostsys.Current()
+	ad, found := adapterByName(list, adapterName)
+	status := ""
+	pending := false
+	switch {
+	case !found:
+		status = "已切换为自动获取，未检测到网卡 [" + adapterName + "]"
+	case !ad.Up:
+		status = "已切换为自动获取（当前网卡未连接）"
+	case ad.DHCP && ad.HasUsableIPv4() && (prevStaticIP == "" || ad.UsableIPv4() != prevStaticIP):
+		status = fmt.Sprintf("✓ [%s] 已恢复自动获取，当前 IP：%s", adapterName, ad.UsableIPv4())
+	default:
+		// No address yet, an APIPA one, or the old static address still listed.
+		pending = true
+		status = "已切换为自动获取，正在等待 DHCP 分配 IP…"
+	}
+	if a.main == nil {
+		a.applyRefreshedData(list, host, overwriteForm)
+		a.setStatus(status)
+		return
+	}
+	a.post(func() {
+		a.applyRefreshedData(list, host, overwriteForm)
+		a.RefreshTrayMenu()
+		a.setStatus(status)
+	})
+	if !pending {
+		return
+	}
+
+	initialCleared := !found || !ad.DHCP || !ad.HasUsableIPv4() ||
+		(prevStaticIP != "" && ad.UsableIPv4() != prevStaticIP)
+	ctx, cancel, gen := a.startAdapterSync(syncPollTimeout)
+	go func() {
+		defer cancel()
+		start := time.Now()
+		sawCleared := initialCleared
+		pred := func(ad netcfg.Adapter) bool {
+			if !ad.Up {
+				// The cable was pulled while waiting: stop instead of polling on.
+				return true
+			}
+			if !ad.DHCP || !ad.HasUsableIPv4() {
+				sawCleared = true
+				return false
+			}
+			if ip := ad.UsableIPv4(); prevStaticIP == "" || ip != prevStaticIP {
+				return true
+			}
+			// Still the address the adapter had as a static one: ready once it was
+			// released at some point, or once it is clear DHCP handed the same one back.
+			return sawCleared || time.Since(start) >= staticPollLimit
+		}
+		list, ad, ok := netcfg.AwaitAdapter(ctx, adapterName, syncPollEvery, pred,
+			func(list []netcfg.Adapter, _ netcfg.Adapter) {
+				a.postAdapterRefreshIf(gen, list, overwriteForm)
+			})
+		if !a.syncValid(gen) {
+			return
+		}
+		host, _ := hostsys.Current()
+		a.post(func() {
+			if !a.syncValid(gen) {
+				return
+			}
+			a.applyRefreshedData(list, host, overwriteForm)
+			a.RefreshTrayMenu()
+			switch {
+			case !ad.Up:
+				a.setStatus("已切换为自动获取（当前网卡未连接）")
+			case ok && ad.HasUsableIPv4():
+				a.setStatus(fmt.Sprintf("✓ [%s] 已自动获取 IP：%s", adapterName, ad.UsableIPv4()))
+			case netcfg.IsAPIPA(ad.CurrentIP()):
+				a.setStatus("⚠ [" + adapterName + "] 已切换为自动获取，仅获取到自动专用地址（169.254.x.x），请检查 DHCP 服务或稍后点击「刷新数据」")
+			default:
+				a.setStatus("⚠ [" + adapterName + "] 已切换为自动获取，暂未获取到 IP，请检查网络或稍后点击「刷新数据」")
+			}
+		})
+	}()
+}
+
+// syncAdapterOnline refreshes the UI after an adapter was enabled or restarted
+// (MAC change) and keeps following it until it is up with a usable address, so
+// the dropdown, the badge and the form pick the new address up by themselves.
+func (a *App) syncAdapterOnline(adapterName string) {
+	a.cancelAdapterSync()
+	time.Sleep(enableStartWait)
+	list, _ := netcfg.List()
+	a.postAdapterRefresh(list, false)
+	if a.main == nil {
+		return
+	}
+	if ad, ok := adapterByName(list, adapterName); ok && ad.Up && (!ad.DHCP || ad.HasUsableIPv4()) {
+		return
+	}
+
+	ctx, cancel, gen := a.startAdapterSync(syncPollTimeout)
+	go func() {
+		defer cancel()
+		list, ad, ok := netcfg.AwaitAdapter(ctx, adapterName, syncPollEvery,
+			func(ad netcfg.Adapter) bool { return ad.Up && (!ad.DHCP || ad.HasUsableIPv4()) },
+			func(list []netcfg.Adapter, _ netcfg.Adapter) {
+				a.postAdapterRefreshIf(gen, list, false)
+			})
+		if !a.syncValid(gen) {
+			return
+		}
+		host, _ := hostsys.Current()
+		a.post(func() {
+			if !a.syncValid(gen) {
+				return
+			}
+			a.applyRefreshedData(list, host, false)
+			a.RefreshTrayMenu()
+			switch {
+			case ok && ad.HasUsableIPv4():
+				a.setStatus(fmt.Sprintf("✓ [%s] 已获取 IP：%s", adapterName, ad.UsableIPv4()))
+			case ok && ad.Up:
+				a.setStatus("✓ [" + adapterName + "] 网卡已启用")
+			default:
+				a.setStatus("⚠ [" + adapterName + "] 网卡已启用，暂未获取到 IP，请稍后点击「刷新数据」")
+			}
+		})
+	}()
+}
+
+// syncAdapterDisabled polls briefly until a disabled adapter reports down, then
+// refreshes the UI.
+func (a *App) syncAdapterDisabled(adapterName string) {
+	ctx, cancel, gen := a.startAdapterSync(disablePollWait)
+	defer cancel()
+	list, _, _ := netcfg.AwaitAdapter(ctx, adapterName, disablePollRate,
+		func(ad netcfg.Adapter) bool { return !ad.Up },
+		func(list []netcfg.Adapter, _ netcfg.Adapter) {
+			a.postAdapterRefreshIf(gen, list, false)
+		})
+	if len(list) == 0 {
+		list, _ = netcfg.List()
+	}
+	a.postAdapterRefreshIf(gen, list, false)
+}
+
+// waitAdapterStatic waits out the short delay before a just-applied static
+// address shows up in the adapter list, refreshing the UI as soon as it does so
+// neither the form nor the badge keeps showing the replaced address.
+func (a *App) waitAdapterStatic(adapterName, targetIP string, overwriteForm bool) {
+	targetIP = strings.TrimSpace(targetIP)
+	if targetIP == "" {
+		a.cancelAdapterSync()
+		list, _ := netcfg.List()
+		a.postAdapterRefresh(list, overwriteForm)
+		return
+	}
+	ctx, cancel, gen := a.startAdapterSync(staticPollLimit)
+	defer cancel()
+	list, _, _ := netcfg.AwaitAdapter(ctx, adapterName, staticPollEvery,
+		func(ad netcfg.Adapter) bool { return !ad.DHCP && containsAddress(ad.IPv4, targetIP) },
+		func(list []netcfg.Adapter, _ netcfg.Adapter) {
+			a.postAdapterRefreshIf(gen, list, overwriteForm)
+		})
+	if len(list) == 0 {
+		return
+	}
+	a.postAdapterRefreshIf(gen, list, overwriteForm)
+}
+
 // AdapterSnapshot captures an adapter's live IPv4 settings right before a
 // modification so the user can roll back with one click.
 type AdapterSnapshot struct {
@@ -135,18 +436,24 @@ func (a *App) rollbackSnapshot() {
 		DNS:      append([]string(nil), req.DNS...),
 		Computer: sysName,
 	}
+	prevStatic := ""
+	if req.DHCP {
+		prevStatic = a.prevStaticIP(adapterName)
+	}
+	targetIP := ""
+	if !req.DHCP && len(req.IPv4) > 0 {
+		targetIP = req.IPv4[0]
+	}
 	a.async(fmt.Sprintf("正在回退 [%s] 至 %s…", adapterName, snap.Summary), func() (string, error) {
 		if _, err := netcfg.Apply(req); err != nil {
 			return "", err
 		}
 		_ = a.store.AppendLog(store.LogFormat(time.Now(), site, sysName, adapterName, profile))
-		time.Sleep(300 * time.Millisecond)
-		list, _ := netcfg.List()
-		host, _ := hostsys.Current()
-		a.post(func() {
-			a.applyRefreshedData(list, host, true)
-			a.RefreshTrayMenu()
-		})
+		if req.DHCP {
+			a.syncAdapterDHCP(adapterName, prevStatic, true)
+			return "", nil
+		}
+		a.waitAdapterStatic(adapterName, targetIP, true)
 		return fmt.Sprintf("已回退 [%s] 至 %s", adapterName, snap.Summary), nil
 	})
 }
@@ -190,6 +497,14 @@ func (a *App) checkConflictOnly() {
 func (a *App) executeApplyReq(req netcfg.Request, profile model.Profile) {
 	adapterName := req.Adapter
 	site, sysName := profile.Location, profile.Computer
+	prevStatic := ""
+	if req.DHCP {
+		prevStatic = a.prevStaticIP(adapterName)
+	}
+	targetIP := ""
+	if !req.DHCP && len(req.IPv4) > 0 {
+		targetIP = req.IPv4[0]
+	}
 	a.captureSnapshot(adapterName)
 	a.async("正在应用配置到 ["+adapterName+"]…", func() (string, error) {
 		if _, err := netcfg.Apply(req); err != nil {
@@ -197,14 +512,12 @@ func (a *App) executeApplyReq(req netcfg.Request, profile model.Profile) {
 		}
 		_ = a.store.AppendLog(store.LogFormat(time.Now(), site, sysName, adapterName, profile))
 		if req.DHCP {
-			time.Sleep(400 * time.Millisecond)
+			// The lease arrives seconds after netsh returns: report and follow it
+			// instead of reading the adapter once and showing an empty address.
+			a.syncAdapterDHCP(adapterName, prevStatic, false)
+			return "", nil
 		}
-		list, _ := netcfg.List()
-		host, _ := hostsys.Current()
-		a.post(func() {
-			a.applyRefreshedData(list, host, false)
-			a.RefreshTrayMenu()
-		})
+		a.waitAdapterStatic(adapterName, targetIP, false)
 		return "已应用配置，" + store.LogFile + " 已记录", nil
 	})
 }

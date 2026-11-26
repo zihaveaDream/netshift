@@ -20,7 +20,7 @@ import (
 )
 
 // version is shown in the status bar and the about window.
-const version = "0.1.0"
+const version = "0.1.1"
 
 const (
 	appTitle  = "NetShift · 网络配置工具箱"

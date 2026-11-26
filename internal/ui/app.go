@@ -221,6 +221,11 @@ type App struct {
 	busy    int
 	mu      sync.Mutex
 
+	// syncGen changes whenever a background adapter wait is superseded;
+	// syncCancel stops the wait that is still running.
+	syncGen    uint64
+	syncCancel context.CancelFunc
+
 	main   *mygo.Window
 	tray   *mygo.Tray
 	wins   map[string]*mygo.Window
@@ -292,7 +297,14 @@ func (a *App) load() {
 func (a *App) Store() *store.Store { return a.store }
 
 // SetMainWindow tells the app which window to post background results to.
-func (a *App) SetMainWindow(w *mygo.Window) { a.main = w }
+func (a *App) SetMainWindow(w *mygo.Window) {
+	a.main = w
+	if w != nil {
+		// A closed window must stop the adapter wait, or its updates would run
+		// against a destroyed window.
+		w.OnClosed(func() { a.cancelAdapterSync() })
+	}
+}
 
 // Version returns the version string shown in the status bar.
 func (a *App) Version() string { return a.version }
@@ -416,6 +428,7 @@ func (a *App) selectAdapterByLabel(label string) {
 	for _, ad := range a.adapters {
 		if ad.Label() == label {
 			if ad.Name != a.adapter {
+				a.cancelAdapterSync()
 				a.adapter = ad.Name
 				a.adapterLabel = ad.Label()
 				a.Form.LoadFromAdapter(ad, a.host)
@@ -758,6 +771,7 @@ func (a *App) applyDHCP() {
 		a.setStatus("✗ 没有可用的网卡")
 		return
 	}
+	prevStatic := a.prevStaticIP(adapterName)
 	a.captureSnapshot(adapterName)
 	a.Form.Mode = 0
 	req := netcfg.Request{Adapter: adapterName, DHCP: true}
@@ -769,14 +783,9 @@ func (a *App) applyDHCP() {
 			return "", err
 		}
 		_ = a.store.AppendLog(store.LogFormat(time.Now(), site, sysName, adapterName, profile))
-		time.Sleep(400 * time.Millisecond)
-		list, _ := netcfg.List()
-		host, _ := hostsys.Current()
-		a.post(func() {
-			a.applyRefreshedData(list, host, false)
-			a.RefreshTrayMenu()
-		})
-		return "已恢复自动获取 IP 和 DNS", nil
+		// Windows switches to DHCP at once but hands out the lease seconds later.
+		a.syncAdapterDHCP(adapterName, prevStatic, false)
+		return "", nil
 	})
 }
 
@@ -824,6 +833,11 @@ func (a *App) applyRefreshedData(list []netcfg.Adapter, host hostsys.Info, overw
 		a.Form.DNS1 = loaded.DNS1
 		a.Form.DNS2 = loaded.DNS2
 	}
+	if keepDHCP {
+		// In DHCP mode the form follows the adapter, so the advanced page must
+		// follow it too instead of keeping the addresses it replaced.
+		a.loadAdvancedFromAdapter(ad)
+	}
 }
 
 // toggleAdapter enables or disables the selected adapter.
@@ -841,10 +855,11 @@ func (a *App) toggleAdapter(on bool) {
 		if err := netcfg.SetAdapterEnabled(adapterName, on); err != nil {
 			return "", err
 		}
-		time.Sleep(600 * time.Millisecond)
-		list, _ := netcfg.List()
-		host, _ := hostsys.Current()
-		a.post(func() { a.applyRefreshedData(list, host, false) })
+		if on {
+			a.syncAdapterOnline(adapterName)
+		} else {
+			a.syncAdapterDisabled(adapterName)
+		}
 		return label + "网卡成功", nil
 	})
 }
@@ -852,6 +867,7 @@ func (a *App) toggleAdapter(on bool) {
 // refreshData re-reads everything asynchronously when a live window exists
 // (or synchronously in headless tests) and reports it in the status bar.
 func (a *App) refreshData() {
+	a.cancelAdapterSync()
 	if a.main == nil {
 		a.refreshAdapters()
 		a.refreshHost()
@@ -943,10 +959,8 @@ func (a *App) setMAC() {
 		if err := macaddr.Set(ad, norm); err != nil {
 			return "", err
 		}
-		time.Sleep(500 * time.Millisecond)
-		list, _ := netcfg.List()
-		host, _ := hostsys.Current()
-		a.post(func() { a.applyRefreshedData(list, host, false) })
+		// The adapter restarts with the new MAC: follow it until it is back.
+		a.syncAdapterOnline(ad.Name)
 		return "MAC 已改为 " + formatted + "（网卡已重启）", nil
 	})
 }
@@ -962,10 +976,7 @@ func (a *App) restoreMAC() {
 		if err := macaddr.Restore(ad); err != nil {
 			return "", err
 		}
-		time.Sleep(500 * time.Millisecond)
-		list, _ := netcfg.List()
-		host, _ := hostsys.Current()
-		a.post(func() { a.applyRefreshedData(list, host, false) })
+		a.syncAdapterOnline(ad.Name)
 		return "MAC 已还原为网卡原始地址（网卡已重启）", nil
 	})
 }
@@ -1055,13 +1066,19 @@ func (a *App) applyProfile(p model.Profile) {
 	adapterName := a.adapter
 	site := p.Location
 	sysName := p.Computer
+	prevStatic := ""
+	if p.DHCP {
+		prevStatic = a.prevStaticIP(adapterName)
+	}
+	targetIP := ""
+	if !p.DHCP && len(p.IPv4) > 0 {
+		targetIP = strings.TrimSpace(p.IPv4[0])
+	}
 	a.async("正在应用方案 ["+p.Name+"]…", func() (string, error) {
 		if _, err := netcfg.Apply(req); err != nil {
 			return "", err
 		}
 		_ = a.store.AppendLog(store.LogFormat(time.Now(), site, sysName, adapterName, p))
-		list, _ := netcfg.List()
-		host, _ := hostsys.Current()
 		a.post(func() {
 			for i := range a.profiles {
 				if a.profiles[i].Name == p.Name {
@@ -1072,9 +1089,13 @@ func (a *App) applyProfile(p model.Profile) {
 			_ = a.store.Save(a.profiles)
 			a.Form.LoadFrom(p)
 			a.loadAdvancedFromForm()
-			a.applyRefreshedData(list, host, false)
 			a.RefreshTrayMenu()
 		})
+		if p.DHCP {
+			a.syncAdapterDHCP(adapterName, prevStatic, false)
+			return "", nil
+		}
+		a.waitAdapterStatic(adapterName, targetIP, false)
 		return "已应用方案 " + p.Name, nil
 	})
 }
@@ -1409,6 +1430,14 @@ func (a *App) advancedApply(pageOnly bool) {
 	}
 	adapterName := ad.Name
 	a.captureSnapshot(adapterName)
+	prevStatic := ""
+	if req.DHCP {
+		prevStatic = a.prevStaticIP(adapterName)
+	}
+	targetIP := ""
+	if !req.DHCP && len(req.IPv4) > 0 {
+		targetIP = strings.TrimSpace(req.IPv4[0])
+	}
 	a.async(fmt.Sprintf("正在设置 [%s] 跃点数为 %d 并应用配置…", adapterName, metric), func() (string, error) {
 		if err := netcfg.SetAdapterMetric(adapterName, metric); err != nil {
 			return "", err
@@ -1417,9 +1446,11 @@ func (a *App) advancedApply(pageOnly bool) {
 			return "", err
 		}
 		_ = a.store.AppendLog(store.LogFormat(time.Now(), profile.Location, profile.Computer, adapterName, profile))
-		list, _ := netcfg.List()
-		host, _ := hostsys.Current()
-		a.post(func() { a.applyRefreshedData(list, host, false) })
+		if req.DHCP {
+			a.syncAdapterDHCP(adapterName, prevStatic, false)
+			return "", nil
+		}
+		a.waitAdapterStatic(adapterName, targetIP, false)
 		return "跃点数与配置已应用", nil
 	})
 }
@@ -1434,6 +1465,7 @@ func (a *App) applyCurrentPage(ad netcfg.Adapter) {
 			return
 		}
 		a.captureSnapshot(ad.Name)
+		a.cancelAdapterSync()
 		req := netcfg.Request{Adapter: ad.Name}
 		for _, row := range a.Adv.IPs {
 			req.IPv4 = append(req.IPv4, strings.TrimSpace(row.Value))
@@ -1449,9 +1481,7 @@ func (a *App) applyCurrentPage(ad netcfg.Adapter) {
 			if _, err := netcfg.ApplyAddresses(req); err != nil {
 				return "", err
 			}
-			list, _ := netcfg.List()
-			host, _ := hostsys.Current()
-			a.post(func() { a.applyRefreshedData(list, host, false) })
+			a.waitAdapterStatic(ad.Name, firstOr(req.IPv4), false)
 			return "已应用 IP 地址页（DNS 未改动）", nil
 		})
 	case 1:
@@ -1481,6 +1511,7 @@ func (a *App) applyCurrentPage(ad netcfg.Adapter) {
 			return
 		}
 		a.captureSnapshot(ad.Name)
+		a.cancelAdapterSync()
 		a.async("正在仅应用网关地址页…", func() (string, error) {
 			if _, err := netcfg.ApplyGateways(ad.Name, gateways); err != nil {
 				return "", err
@@ -1498,6 +1529,7 @@ func (a *App) applyCurrentPage(ad netcfg.Adapter) {
 			}
 		}
 		a.captureSnapshot(ad.Name)
+		a.cancelAdapterSync()
 		a.async("正在仅应用 DNS 服务器页…", func() (string, error) {
 			if _, err := netcfg.ApplyDNS(ad.Name, servers); err != nil {
 				return "", err
@@ -1532,11 +1564,15 @@ func (a *App) releaseIP() {
 		a.setStatus("✗ 没有可用的网卡")
 		return
 	}
+	a.cancelAdapterSync()
 	a.async("正在释放 IP 地址…", func() (string, error) {
 		out, err := netcfg.Release(ad.Name)
 		list, _ := netcfg.List()
 		host, _ := hostsys.Current()
-		a.post(func() { a.applyRefreshedData(list, host, false) })
+		a.post(func() {
+			a.applyRefreshedData(list, host, false)
+			a.RefreshTrayMenu()
+		})
 		return strings.TrimSpace(out), err
 	})
 }
@@ -1547,11 +1583,15 @@ func (a *App) renewIP() {
 		a.setStatus("✗ 没有可用的网卡")
 		return
 	}
+	a.cancelAdapterSync()
 	a.async("正在更新 IP 地址…", func() (string, error) {
 		out, err := netcfg.Renew(ad.Name)
 		list, _ := netcfg.List()
 		host, _ := hostsys.Current()
-		a.post(func() { a.applyRefreshedData(list, host, false) })
+		a.post(func() {
+			a.applyRefreshedData(list, host, false)
+			a.RefreshTrayMenu()
+		})
 		return strings.TrimSpace(out), err
 	})
 }

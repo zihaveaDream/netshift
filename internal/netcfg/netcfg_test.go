@@ -1,9 +1,11 @@
 package netcfg
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"netshift/internal/model"
 )
@@ -241,5 +243,227 @@ func TestCheckNetshResult(t *testing.T) {
 	// Normal success output passes through cleanly.
 	if err := checkNetshResult(`netsh interface ip set address name="以太网" source=dhcp`, "", nil); err != nil {
 		t.Errorf("clean success rejected: %v", err)
+	}
+}
+
+func TestIsAPIPAAndUsableIPv4(t *testing.T) {
+	for _, ip := range []string{"169.254.10.20", " 169.254.0.1 ", "169.254.255.254"} {
+		if !IsAPIPA(ip) {
+			t.Errorf("IsAPIPA(%q) = false, want true", ip)
+		}
+	}
+	for _, ip := range []string{"192.168.1.10", "10.0.0.1", "169.253.1.1", "0.0.0.0", ""} {
+		if IsAPIPA(ip) {
+			t.Errorf("IsAPIPA(%q) = true, want false", ip)
+		}
+	}
+
+	apipa := Adapter{IPv4: []string{"169.254.7.7"}}
+	if apipa.UsableIPv4() != "" || apipa.HasUsableIPv4() {
+		t.Errorf("an APIPA address is not usable: %q", apipa.UsableIPv4())
+	}
+	empty := Adapter{}
+	if empty.UsableIPv4() != "" || empty.HasUsableIPv4() {
+		t.Error("an adapter without addresses has no usable IPv4")
+	}
+	normal := Adapter{IPv4: []string{"192.168.1.10"}}
+	if normal.UsableIPv4() != "192.168.1.10" || !normal.HasUsableIPv4() {
+		t.Errorf("UsableIPv4 = %q", normal.UsableIPv4())
+	}
+	// The automatic address Windows keeps next to the real one must be skipped.
+	mixed := Adapter{IPv4: []string{"169.254.7.7", "192.168.1.10", "10.0.0.5"}}
+	if mixed.UsableIPv4() != "192.168.1.10" || !mixed.HasUsableIPv4() {
+		t.Errorf("UsableIPv4 = %q, want 192.168.1.10", mixed.UsableIPv4())
+	}
+}
+
+func TestDecodeWithCandidatesSkipsUTF8AndFallbacks(t *testing.T) {
+	// 在链路上 encoded as GBK, the way cmd.exe prints it on a Chinese Windows.
+	gbk := []byte{0xD4, 0xDA, 0xC1, 0xB4, 0xC2, 0xB7, 0xC9, 0xCF}
+
+	// OEMCP/ACP report 65001 in a build whose manifest sets activeCodePage UTF-8;
+	// 0 means unknown. Both must be dropped, 936 must survive once.
+	cps := codePageCandidates([]uint32{65001, 0, 936, 936, 65001}, 936, 54936)
+	want := []uint32{936, 54936}
+	if len(cps) != len(want) {
+		t.Fatalf("candidates = %v, want %v", cps, want)
+	}
+	for i := range want {
+		if cps[i] != want[i] {
+			t.Fatalf("candidate %d = %d, want %d", i, cps[i], want[i])
+		}
+	}
+
+	var called []uint32
+	convert := func(cp, flags uint32, data []byte) (string, bool) {
+		called = append(called, cp)
+		if cp != 936 {
+			return "", false
+		}
+		if string(data) != string(gbk) {
+			return "", false
+		}
+		return "在链路上", true
+	}
+	if got := decodeWithCandidates(gbk, cps, convert); got != "在链路上" {
+		t.Errorf("decodeWithCandidates = %q, want 在链路上", got)
+	}
+	for _, cp := range called {
+		if cp == 65001 {
+			t.Error("65001 must never be tried: the bytes are not UTF-8")
+		}
+	}
+
+	// Valid UTF-8 passes through untouched, without consulting any code page.
+	called = nil
+	if got := decodeWithCandidates([]byte("以太网"), cps, convert); got != "以太网" {
+		t.Errorf("UTF-8 input changed: %q", got)
+	}
+	if len(called) != 0 {
+		t.Errorf("UTF-8 input should not reach the code pages: %v", called)
+	}
+
+	// A UTF-8 BOM is stripped, and an empty sample stays empty.
+	if got := decodeWithCandidates(append([]byte{0xEF, 0xBB, 0xBF}, []byte("以太网")...), cps, convert); got != "以太网" {
+		t.Errorf("BOM was not stripped: %q", got)
+	}
+	if got := decodeWithCandidates(nil, cps, convert); got != "" {
+		t.Errorf("empty input = %q", got)
+	}
+	if got := decodeWithCandidates([]byte{0xEF, 0xBB, 0xBF}, cps, convert); got != "" {
+		t.Errorf("BOM-only input = %q", got)
+	}
+
+	// Nothing converts: the last resort repairs the bytes instead of keeping them.
+	if got := decodeWithCandidates([]byte{0xFF, 0xFE, 'A'}, []uint32{936}, func(uint32, uint32, []byte) (string, bool) {
+		return "", false
+	}); got != "?A" {
+		t.Errorf("lossy fallback = %q, want ?A", got)
+	}
+}
+
+func TestDecodeWithCandidatesLenientRound(t *testing.T) {
+	gbk := []byte{0xD4, 0xDA, 0xC1, 0xB4, 0xC2, 0xB7, 0xC9, 0xCF}
+	var flags []uint32
+	// 936 supports MB_ERR_INVALID_CHARS: the strict round fails, the lenient one wins.
+	convert := func(cp, f uint32, data []byte) (string, bool) {
+		flags = append(flags, f)
+		if f&mbErrInvalidChars != 0 {
+			return "", false
+		}
+		return "宽松兜底", true
+	}
+	if got := decodeWithCandidates(gbk, []uint32{936}, convert); got != "宽松兜底" {
+		t.Errorf("lenient round = %q, want 宽松兜底", got)
+	}
+	if len(flags) != 2 || flags[0] != mbErrInvalidChars || flags[1] != 0 {
+		t.Errorf("flags = %v, want [%#x 0]", flags, mbErrInvalidChars)
+	}
+
+	// 54936 cannot take the strict flag, so the first round already runs leniently.
+	flags = nil
+	if got := decodeWithCandidates(gbk, []uint32{54936}, convert); got != "宽松兜底" {
+		t.Errorf("54936 round = %q, want 宽松兜底", got)
+	}
+	if len(flags) != 1 || flags[0] != 0 {
+		t.Errorf("54936 flags = %v, want [0]", flags)
+	}
+}
+
+func TestAwaitAdapterWith(t *testing.T) {
+	listWith := func(ad Adapter) func() ([]Adapter, error) {
+		return func() ([]Adapter, error) { return []Adapter{ad}, nil }
+	}
+	usable := func(ad Adapter) bool { return ad.HasUsableIPv4() }
+
+	// Already satisfied: one sample, no wait.
+	samples := 0
+	list, ad, ok := awaitAdapterWith(context.Background(), "以太网", 10*time.Millisecond,
+		func() ([]Adapter, error) {
+			samples++
+			return listWith(Adapter{Name: "以太网", Up: true, DHCP: true, IPv4: []string{"192.168.1.10"}})()
+		}, usable, nil)
+	if !ok || ad.UsableIPv4() != "192.168.1.10" || len(list) != 1 {
+		t.Fatalf("immediate match = %+v, %+v, %v", list, ad, ok)
+	}
+	if samples != 1 {
+		t.Errorf("sampled %d times, want 1", samples)
+	}
+
+	// Satisfied on the third round; onUpdate reports each state change once.
+	round := 0
+	var updates []string
+	list, ad, ok = awaitAdapterWith(context.Background(), "以太网", 5*time.Millisecond,
+		func() ([]Adapter, error) {
+			round++
+			ip := ""
+			switch {
+			case round == 3:
+				ip = "192.168.1.20"
+			case round > 3:
+				ip = "10.0.0.9"
+			}
+			return listWith(Adapter{Name: "以太网", Up: true, DHCP: true, IPv4: []string{ip}})()
+		}, usable, func(_ []Adapter, ad Adapter) { updates = append(updates, ad.CurrentIP()) })
+	if !ok || ad.UsableIPv4() != "192.168.1.20" || len(list) != 1 {
+		t.Fatalf("third-round match = %+v, %+v, %v", list, ad, ok)
+	}
+	if round != 3 {
+		t.Errorf("polled %d rounds, want 3", round)
+	}
+	if len(updates) != 1 || updates[0] != "" {
+		t.Errorf("updates = %v, want one change from no IP", updates)
+	}
+
+	// Timeout with an APIPA address still returns the last sample.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
+	defer cancel()
+	list, ad, ok = awaitAdapterWith(ctx, "以太网", 5*time.Millisecond,
+		listWith(Adapter{Name: "以太网", Up: true, DHCP: true, IPv4: []string{"169.254.3.3"}}), usable, nil)
+	if ok {
+		t.Error("an APIPA address must not satisfy the wait")
+	}
+	if ad.CurrentIP() != "169.254.3.3" || len(list) != 1 {
+		t.Errorf("timeout sample = %+v, %+v", list, ad)
+	}
+
+	// Cancelling returns immediately, without waiting for the next poll.
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	calls := 0
+	done := make(chan bool, 1)
+	go func() {
+		_, _, ok := awaitAdapterWith(ctx2, "以太网", time.Second,
+			func() ([]Adapter, error) {
+				calls++
+				return listWith(Adapter{Name: "以太网", Up: true, DHCP: true})()
+			}, usable, nil)
+		done <- ok
+	}()
+	time.Sleep(30 * time.Millisecond)
+	cancel2()
+	select {
+	case ok := <-done:
+		if ok {
+			t.Error("a cancelled wait must not report success")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the wait kept running after it was cancelled")
+	}
+	if calls != 1 {
+		t.Errorf("polled %d times while waiting for a 1s tick, want 1", calls)
+	}
+
+	// A failing list is retried instead of ending the wait.
+	attempt := 0
+	_, ad, ok = awaitAdapterWith(context.Background(), "以太网", 5*time.Millisecond,
+		func() ([]Adapter, error) {
+			attempt++
+			if attempt == 1 {
+				return nil, errors.New("GetAdaptersAddresses failed")
+			}
+			return listWith(Adapter{Name: "以太网", Up: true, DHCP: true, IPv4: []string{"192.168.1.30"}})()
+		}, usable, nil)
+	if !ok || ad.UsableIPv4() != "192.168.1.30" {
+		t.Errorf("recovery after a list error = %+v, %v", ad, ok)
 	}
 }

@@ -4,6 +4,7 @@ package netcfg
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"netshift/internal/model"
@@ -71,6 +72,29 @@ func (a Adapter) CurrentIP() string {
 		return ""
 	}
 	return a.IPv4[0]
+}
+
+// UsableIPv4 returns the first address that can actually be used, skipping the
+// 169.254.x.x address Windows assigns itself when DHCP hands out nothing.
+func (a Adapter) UsableIPv4() string {
+	for _, ip := range a.IPv4 {
+		if net.ParseIP(strings.TrimSpace(ip)).To4() == nil || IsAPIPA(ip) {
+			continue
+		}
+		return ip
+	}
+	return ""
+}
+
+// HasUsableIPv4 reports whether the adapter holds an address that is not an
+// automatic private one.
+func (a Adapter) HasUsableIPv4() bool { return a.UsableIPv4() != "" }
+
+// IsAPIPA reports whether ip is an IPv4 link-local address (169.254.0.0/16), the
+// one Windows picks when no DHCP server answered.
+func IsAPIPA(ip string) bool {
+	ip4 := net.ParseIP(strings.TrimSpace(ip)).To4()
+	return ip4 != nil && ip4[0] == 169 && ip4[1] == 254
 }
 
 // Label is the line shown in the adapter list.

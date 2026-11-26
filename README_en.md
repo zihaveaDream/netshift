@@ -8,7 +8,7 @@
 
 [简体中文](README.md) | English
 
-[![Version](https://img.shields.io/badge/version-v0.1.0-0052a8?style=flat-square)](mygo.json)
+[![Version](https://img.shields.io/badge/version-v0.1.1-0052a8?style=flat-square)](mygo.json)
 [![Go](https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go&logoColor=white)](go.mod)
 [![UI](https://img.shields.io/badge/UI-mygo%20v0.7.4-1f2937?style=flat-square)](https://github.com/egoist/mygo)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-0078D6?style=flat-square)](#build-and-run)
@@ -24,7 +24,7 @@
 
 **NetShift** is inspired by **kn007's IP Address Modifier 5.0 Remastered**, rebuilt from scratch in Go 1.27 with [mygo](https://github.com/egoist/mygo) native GPU-rendered UI. It integrates multi-subnet engineering workflows (**site-based profile inheritance, intranet split routing, and audit logging**) and extends them with **IP conflict pre-checks, automatic pre-change snapshot rollback, connectivity diagnostics, structured IPv4 route management, Windows system proxy & Hosts editing, and quick system-tray switching**.
 
-- Current Version: `v0.1.0`
+- Current Version: `v0.1.1` (see [CHANGELOG.md](CHANGELOG.md))
 
 ---
 
@@ -42,7 +42,7 @@
 
 ## Screenshots
 
-> All screenshots below were generated on Windows 11 x64 (Go 1.27.3) with full tests passing (version `v0.1.0`).
+> All screenshots below were generated on Windows 11 x64 (Go 1.27.3) with full tests passing (version `v0.1.1`).
 
 ### Main Window
 
@@ -162,22 +162,22 @@ go tool mygo vet .
 go tool mygo build
 
 # 5. Rename release artifacts to versioned filenames
-Move-Item -Force build\windows-amd64\netshift.exe build\windows-amd64\netshift-v0.1.0.exe
-Move-Item -Force build\windows-amd64\netshift-setup-0.1.0-amd64.exe build\windows-amd64\netshift-setup-v0.1.0-amd64.exe
+Move-Item -Force build\windows-amd64\netshift.exe build\windows-amd64\netshift-v0.1.1.exe
+Move-Item -Force build\windows-amd64\netshift-setup-0.1.1-amd64.exe build\windows-amd64\netshift-setup-v0.1.1-amd64.exe
 ```
 
 Release artifacts in `build/windows-amd64/`:
 
 ```text
-build/windows-amd64/netshift-v0.1.0.exe                  Standalone executable
-build/windows-amd64/netshift-setup-v0.1.0-amd64.exe      NSIS installer
+build/windows-amd64/netshift-v0.1.1.exe                  Standalone executable
+build/windows-amd64/netshift-setup-v0.1.1-amd64.exe      NSIS installer
 ```
 
 ### Debug & Verification Flags
 
 ```powershell
 # Skip automatic UAC elevation during UI development
-$env:NETSHIFT_NO_ELEVATE = '1'; .\build\windows-amd64\netshift-v0.1.0.exe
+$env:NETSHIFT_NO_ELEVATE = '1'; .\build\windows-amd64\netshift-v0.1.1.exe
 
 # Read-only verification of live local NIC enumeration (GetAdaptersAddresses)
 $env:NETSHIFT_LIVE = '1'; go test -count=1 -run TestLiveAdapters -v ./internal/netcfg
@@ -199,7 +199,7 @@ $env:NETSHIFT_SHOTS = '.tmp\shots'; go test -count=1 -run TestCaptureFrames -v .
 ```text
 netshift/
 ├── main.go                   Entry point: DPI awareness, single-instance mutex, UAC elevation, main window & tray
-├── mygo.json                 mygo app metadata and packaging config (v0.1.0)
+├── mygo.json                 mygo app metadata and packaging config (v0.1.1)
 ├── go.mod / go.sum           Go module definition (module netshift)
 ├── README.md                 Simplified Chinese README
 ├── README_en.md              English README
@@ -224,7 +224,7 @@ netshift/
 
 ## Comparison with the Original
 
-| Aspect | Original (IP Address Modifier 5.0 Remastered) | NetShift (`v0.1.0`) |
+| Aspect | Original (IP Address Modifier 5.0 Remastered) | NetShift (`v0.1.1`) |
 |---|---|---|
 | **Architecture** | Compiled AutoIt3 script (UPX-packed, 32-bit) | Native Go 1.27 + mygo GPU rendering (native x64) |
 | **UI & Icon** | Fixed-pixel Win32 forms (`706x369`) & legacy icon | Responsive Fluent grid, high-contrast `500/700` Source Han Serif typography, Per-Monitor-v2 DPI, obsidian node icon |

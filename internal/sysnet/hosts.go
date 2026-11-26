@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
+
+	"netshift/internal/netcfg"
 )
 
 // DefaultHostsPath returns the Windows system hosts file path.
@@ -42,6 +45,11 @@ func LoadHosts(path string) (*HostFile, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("读取 hosts 文件失败：%w", err)
+	}
+	if !utf8.Valid(raw) {
+		// A hosts file edited with an ANSI editor is in the console code page
+		// (GBK on a Chinese Windows), not UTF-8: decode it before parsing.
+		raw = []byte(netcfg.DecodeConsole(raw))
 	}
 	return ParseHosts(path, string(raw)), nil
 }

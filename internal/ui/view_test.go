@@ -3,9 +3,11 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
+	"netshift/internal/hostsys"
 	"netshift/internal/model"
 	"netshift/internal/netcfg"
 	"netshift/internal/routing"
@@ -403,4 +405,78 @@ func TestAboutView(t *testing.T) {
 			t.Errorf("about window is missing %q", want)
 		}
 	}
+}
+
+// TestApplyRefreshedDataSyncsDHCPAdapter checks that a DHCP adapter whose lease
+// arrives after the apply reaches every place showing it: the dropdown label, the
+// status badge, the form fields and the advanced page.
+func TestApplyRefreshedDataSyncsDHCPAdapter(t *testing.T) {
+	app := newTestApp(t)
+	app.host = hostsys.Info{Name: "PC", Workgroup: "WORKGROUP"}
+	app.adapters = []netcfg.Adapter{{Name: "以太网", Up: true, DHCP: true}}
+	app.adapter = "以太网"
+	app.adapterLabel = app.adapterChoice()
+	app.Form = Form{}
+	app.Form.LoadFromAdapter(netcfg.Adapter{Name: "以太网", Up: true, DHCP: true}, app.host)
+	if app.adapterLabel != "以太网 (无 IP)" {
+		t.Fatalf("starting label = %q", app.adapterLabel)
+	}
+
+	app.applyRefreshedData([]netcfg.Adapter{{
+		Name:     "以太网",
+		Up:       true,
+		DHCP:     true,
+		IPv4:     []string{"192.168.1.33"},
+		Masks:    []string{"255.255.255.0"},
+		Gateways: []string{"192.168.1.1"},
+		DNS:      []string{"223.5.5.5"},
+	}}, app.host, false)
+
+	if app.adapterLabel != "以太网 (192.168.1.33)" {
+		t.Errorf("dropdown label = %q, want 以太网 (192.168.1.33)", app.adapterLabel)
+	}
+	if got := app.currentAdapter().Status(); got != "已连接" {
+		t.Errorf("badge = %q, want 已连接", got)
+	}
+	if app.Form.IP != "192.168.1.33" || app.Form.Mask != "255.255.255.0" ||
+		app.Form.Gateway != "192.168.1.1" || app.Form.DNS1 != "223.5.5.5" {
+		t.Errorf("form = %+v", app.Form)
+	}
+	if app.Form.Mode != 0 {
+		t.Errorf("mode = %d, want DHCP (0)", app.Form.Mode)
+	}
+	if len(app.Adv.IPs) != 1 || app.Adv.IPs[0].Value != "192.168.1.33" || app.Adv.IPs[0].Mask != "255.255.255.0" {
+		t.Errorf("advanced page did not follow the DHCP lease: %+v", app.Adv.IPs)
+	}
+}
+
+func TestCancelAdapterSyncInvalidatesWait(t *testing.T) {
+	app := newTestApp(t)
+	app.mu.Lock()
+	start := app.syncGen
+	app.mu.Unlock()
+
+	ctx, _, gen := app.startAdapterSync(time.Second)
+	if !app.syncValid(gen) {
+		t.Fatal("a freshly started sync should be valid")
+	}
+	if gen != start+1 {
+		t.Errorf("generation = %d, want %d", gen, start+1)
+	}
+
+	app.cancelAdapterSync()
+	if app.syncGen != gen+1 {
+		t.Errorf("syncGen = %d, want %d", app.syncGen, gen+1)
+	}
+	if app.syncValid(gen) {
+		t.Error("the cancelled generation must not post any more updates")
+	}
+	select {
+	case <-ctx.Done():
+	case <-time.After(time.Second):
+		t.Error("cancelAdapterSync did not cancel the wait context")
+	}
+
+	// SetMainWindow(nil) must remain safe for headless callers/tests.
+	app.SetMainWindow(nil)
 }

@@ -3,6 +3,9 @@ package routing
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
+
+	"netshift/internal/netcfg"
 )
 
 func TestCandidatesStartWithOwnNetworks(t *testing.T) {
@@ -181,5 +184,40 @@ func TestParseTableAndDeleteCommand(t *testing.T) {
 	cmd2, err := DeleteCommand(entries[2])
 	if err != nil || cmd2 != "route delete 192.168.1.0 mask 255.255.255.0" {
 		t.Errorf("DeleteCommand(on-link) = %q, %v", cmd2, err)
+	}
+}
+
+// TestParseTableAfterConsoleDecode feeds ParseTable what `route print -4` prints
+// on a Chinese Windows: GBK bytes decoded through netcfg.DecodeConsole. The
+// on-link gateway must come out as 在链路上 instead of U+FFFD garbage.
+func TestParseTableAfterConsoleDecode(t *testing.T) {
+	var gbk []byte
+	add := func(s string) { gbk = append(gbk, []byte(s)...) }
+	// 活动路由:
+	gbk = append(gbk, 0xBB, 0xEE, 0xB6, 0xAF, 0xC2, 0xB7, 0xD3, 0xC9)
+	add(":\r\n")
+	add("          0.0.0.0          0.0.0.0      192.168.1.1     192.168.1.10     25\r\n")
+	add("    192.168.1.0    255.255.255.0   ")
+	// 在链路上
+	gbk = append(gbk, 0xD4, 0xDA, 0xC1, 0xB4, 0xC2, 0xB7, 0xC9, 0xCF)
+	add("     192.168.1.10    281\r\n")
+	// 永久路由:
+	gbk = append(gbk, 0xD3, 0xC0, 0xBE, 0xC3, 0xC2, 0xB7, 0xD3, 0xC9)
+	add(":\r\n")
+	add("     172.16.0.0      255.240.0.0      192.168.1.1       1\r\n")
+
+	text := netcfg.DecodeConsole(gbk)
+	if strings.ContainsRune(text, utf8.RuneError) {
+		t.Fatalf("decoded route table still carries U+FFFD:\n%s", text)
+	}
+	entries := ParseTable(text)
+	if len(entries) != 3 {
+		t.Fatalf("parsed %d routes, want 3:\n%s", len(entries), text)
+	}
+	if entries[1].Dest != "192.168.1.0" || entries[1].Gateway != "在链路上" {
+		t.Errorf("on-link route = %+v, want gateway 在链路上", entries[1])
+	}
+	if !entries[2].Persistent || entries[2].Dest != "172.16.0.0" || entries[2].Gateway != "192.168.1.1" {
+		t.Errorf("persistent route = %+v", entries[2])
 	}
 }

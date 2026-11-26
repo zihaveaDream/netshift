@@ -8,7 +8,7 @@
 
 简体中文 | [English](README_en.md)
 
-[![Version](https://img.shields.io/badge/version-v0.1.0-0052a8?style=flat-square)](mygo.json)
+[![Version](https://img.shields.io/badge/version-v0.1.1-0052a8?style=flat-square)](mygo.json)
 [![Go](https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go&logoColor=white)](go.mod)
 [![UI](https://img.shields.io/badge/UI-mygo%20v0.7.4-1f2937?style=flat-square)](https://github.com/egoist/mygo)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-0078D6?style=flat-square)](#构建与运行)
@@ -24,7 +24,7 @@
 
 **NetShift**（网络配置工具箱）灵感源于 **kn007《IP 地址修改器 5.0 重制版》**，采用 Go 1.27 + [mygo](https://github.com/egoist/mygo) 原生 GPU 渲染 UI 从零构建，融合了面向多网段场景的**项目地点继承、内网分流路由与操作审计日志**，并扩展了 **IP 冲突预检、修改前自动快照回退、网络连通性诊断、可视化路由表管理、Windows 系统代理与 Hosts 快捷管理、以及系统托盘极速切换**等能力。
 
-- 当前版本：`v0.1.0`
+- 当前版本：`v0.1.1`（变更记录见 [CHANGELOG.md](CHANGELOG.md)）
 
 ---
 
@@ -42,7 +42,7 @@
 
 ## 实测截图
 
-> 以下截图均在 Windows 11 x64（Go 1.27.3）环境下通过实测编译与全量测试生成（版本 `v0.1.0`）。
+> 以下截图均在 Windows 11 x64（Go 1.27.3）环境下通过实测编译与全量测试生成（版本 `v0.1.1`）。
 
 ### 主窗口
 
@@ -162,22 +162,22 @@ go tool mygo vet .
 go tool mygo build
 
 # 5. 按发布命名整理交付产物
-Move-Item -Force build\windows-amd64\netshift.exe build\windows-amd64\netshift-v0.1.0.exe
-Move-Item -Force build\windows-amd64\netshift-setup-0.1.0-amd64.exe build\windows-amd64\netshift-setup-v0.1.0-amd64.exe
+Move-Item -Force build\windows-amd64\netshift.exe build\windows-amd64\netshift-v0.1.1.exe
+Move-Item -Force build\windows-amd64\netshift-setup-0.1.1-amd64.exe build\windows-amd64\netshift-setup-v0.1.1-amd64.exe
 ```
 
 交付产物位于 `build/windows-amd64/`：
 
 ```text
-build/windows-amd64/netshift-v0.1.0.exe                  独立可执行文件
-build/windows-amd64/netshift-setup-v0.1.0-amd64.exe      NSIS 安装包
+build/windows-amd64/netshift-v0.1.1.exe                  独立可执行文件
+build/windows-amd64/netshift-setup-v0.1.1-amd64.exe      NSIS 安装包
 ```
 
 ### 调试与验证开关
 
 ```powershell
 # 开发期跳过 UAC 自动提权（以标准权限启动界面预览）
-$env:NETSHIFT_NO_ELEVATE = '1'; .\build\windows-amd64\netshift-v0.1.0.exe
+$env:NETSHIFT_NO_ELEVATE = '1'; .\build\windows-amd64\netshift-v0.1.1.exe
 
 # 只读实测本机真实网卡枚举（GetAdaptersAddresses）
 $env:NETSHIFT_LIVE = '1'; go test -count=1 -run TestLiveAdapters -v ./internal/netcfg
@@ -199,7 +199,7 @@ $env:NETSHIFT_SHOTS = '.tmp\shots'; go test -count=1 -run TestCaptureFrames -v .
 ```text
 netshift/
 ├── main.go                   程序入口：DPI 感知、单实例互斥、UAC 提权、主窗口与托盘初始化
-├── mygo.json                 mygo 应用元数据与打包配置（v0.1.0）
+├── mygo.json                 mygo 应用元数据与打包配置（v0.1.1）
 ├── go.mod / go.sum           Go 模块与依赖声明（module netshift）
 ├── README.md                 简体中文说明文档
 ├── README_en.md              English README
@@ -224,7 +224,7 @@ netshift/
 
 ## 与原版差异
 
-| 对比项 | 原版（IP 地址修改器 5.0 重制版） | NetShift（v0.1.0） |
+| 对比项 | 原版（IP 地址修改器 5.0 重制版） | NetShift（v0.1.1） |
 |---|---|---|
 | **架构与位数** | AutoIt3 编译脚本（UPX 压缩，32 位） | 原生 Go 1.27 + mygo GPU 渲染（原生 x64） |
 | **界面与图标** | 固定像素 Win32 表单（706×369）与旧版图标 | 响应式 Fluent 网格、思源宋体高对比度排版、Per-Monitor-v2 DPI 自适应、全新深曜石极简图标 |

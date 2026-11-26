@@ -177,7 +177,7 @@ func RunContext(ctx context.Context, line string) (string, error) {
 	cmd := exec.CommandContext(ctx, "cmd", "/c", line)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, err := cmd.CombinedOutput()
-	text := strings.TrimSpace(decodeConsole(out))
+	text := strings.TrimSpace(DecodeConsole(out))
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return text, fmt.Errorf("命令执行超时（%v）", defaultCmdTimeout)
@@ -284,22 +284,11 @@ func Renew(adapter string) (string, error) {
 
 func FlushDNS() (string, error) { return Run(FlushDNSCommand()) }
 
-// decodeConsole turns console (OEM code page, 936 on a Chinese Windows) output
-// into UTF-8.
-func decodeConsole(b []byte) string {
-	if len(b) == 0 {
-		return ""
-	}
-	const cpOEM = 1
-	n, err := windows.MultiByteToWideChar(cpOEM, 0, &b[0], int32(len(b)), nil, 0)
-	if err != nil || n <= 0 {
-		return string(b)
-	}
-	wide := make([]uint16, n)
-	if _, err := windows.MultiByteToWideChar(cpOEM, 0, &b[0], int32(len(b)), &wide[0], n); err != nil {
-		return string(b)
-	}
-	return windows.UTF16ToString(wide)
+// AwaitAdapter polls the adapter list until pred accepts the adapter named
+// name, calling onUpdate whenever its state changes. It is the Windows entry to
+// awaitAdapterWith, for callers waiting out a DHCP lease or a restarted adapter.
+func AwaitAdapter(ctx context.Context, name string, interval time.Duration, pred func(Adapter) bool, onUpdate func([]Adapter, Adapter)) ([]Adapter, Adapter, bool) {
+	return awaitAdapterWith(ctx, name, interval, List, pred, onUpdate)
 }
 
 // IsElevated reports whether the process can change network settings.

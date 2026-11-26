@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestParseToggleAddDeleteHosts(t *testing.T) {
@@ -67,5 +68,41 @@ func TestHostsSaveRoundTrip(t *testing.T) {
 	}
 	if _, err := os.Stat(path + ".netshift.bak"); err != nil {
 		t.Error("backup file was not created")
+	}
+}
+
+// TestLoadHostsDecodesANSIComment reads a hosts file saved by an ANSI editor:
+// its Chinese comment is GBK, not UTF-8, and must not turn into U+FFFD.
+func TestLoadHostsDecodesANSIComment(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hosts")
+	// "127.0.0.1 localhost # 中文备注"
+	raw := append([]byte("127.0.0.1 localhost # "), 0xD6, 0xD0, 0xCE, 0xC4, 0xB1, 0xB8, 0xD7, 0xA2, '\r', '\n')
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hf, err := LoadHosts(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hf.Entries) != 1 {
+		t.Fatalf("parsed %d entries, want 1: %+v", len(hf.Entries), hf.Entries)
+	}
+	if got := hf.Entries[0].Comment; got != "中文备注" {
+		t.Errorf("comment = %q, want 中文备注", got)
+	}
+	if !utf8.ValidString(hf.Entries[0].Comment) {
+		t.Error("the decoded comment is not valid UTF-8")
+	}
+	// A file that already is UTF-8 is left alone.
+	utf8Path := filepath.Join(t.TempDir(), "hosts")
+	if err := os.WriteFile(utf8Path, []byte("127.0.0.1 localhost # 内网映射\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hf, err = LoadHosts(utf8Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hf.Entries) != 1 || hf.Entries[0].Comment != "内网映射" {
+		t.Errorf("UTF-8 hosts changed: %+v", hf.Entries)
 	}
 }
