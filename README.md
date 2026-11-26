@@ -12,6 +12,8 @@
 [![Go](https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go&logoColor=white)](go.mod)
 [![UI](https://img.shields.io/badge/UI-mygo%20v0.7.4-1f2937?style=flat-square)](https://github.com/egoist/mygo)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-0078D6?style=flat-square)](#构建与运行)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+[![Listed on Awesome MyGo](https://awesomemygo.dev/badge.svg)](https://awesomemygo.dev/apps/netshift)
 
 [核心特点](#核心特点) · [实测截图](#实测截图) · [功能清单](#功能清单) · [构建与运行](#构建与运行) · [目录结构](#目录结构) · [与原版差异](#与原版差异) · [致谢](#致谢)
 
