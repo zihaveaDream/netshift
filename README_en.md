@@ -13,6 +13,7 @@
 [![UI](https://img.shields.io/badge/UI-mygo%20v0.7.4-1f2937?style=flat-square)](https://github.com/egoist/mygo)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-0078D6?style=flat-square)](#build-and-run)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+
 [![Listed on Awesome MyGo](https://awesomemygo.dev/badge.svg)](https://awesomemygo.dev/apps/netshift)
 
 [Key Features](#key-features) · [Screenshots](#screenshots) · [Feature Overview](#feature-overview) · [Build and Run](#build-and-run) · [Project Structure](#project-structure) · [Comparison](#comparison-with-the-original) · [Acknowledgements](#acknowledgements)
